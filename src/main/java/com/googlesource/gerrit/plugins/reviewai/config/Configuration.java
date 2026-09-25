@@ -87,6 +87,7 @@ public class Configuration extends ConfigCore {
   private static final int DEFAULT_MAX_REVIEW_LINES = 1000;
   private static final int DEFAULT_PATCH_CONTEXT_LINES = 3;
   private static final boolean DEFAULT_ENABLED_VOTING = false;
+  private static final boolean DEFAULT_AI_PROJECT_INSTRUCTIONS_IN_REVIEWS = false;
   private static final boolean DEFAULT_CONVERT_NEUTRAL_REVIEW_SCORE_TO_POSITIVE = true;
   private static final double DEFAULT_FILTER_COMMENTS_RELEVANCE_THRESHOLD = 0.6;
   private static final boolean DEFAULT_MULTI_AGENT_MODE = false;
@@ -146,6 +147,8 @@ public class Configuration extends ConfigCore {
   private static final String KEY_ENABLED_FILE_EXTENSIONS = "enabledFileExtensions";
   private static final String KEY_DISABLED_FILE_EXTENSIONS = "disabledFileExtensions";
   private static final String KEY_ENABLED_VOTING = "enabledVoting";
+  private static final String KEY_AI_PROJECT_INSTRUCTIONS_IN_REVIEWS =
+      "aiProjectInstructionsInReviews";
   private static final String KEY_CONVERT_NEUTRAL_REVIEW_SCORE_TO_POSITIVE =
       "convertNeutralReviewScoreToPositive";
   private static final String KEY_FILTER_COMMENTS_RELEVANCE_THRESHOLD =
@@ -331,6 +334,11 @@ public class Configuration extends ConfigCore {
 
   public List<String> getCommitMessageDirective() {
     return splitListIntoItems(KEY_COMMIT_MESSAGE_DIRECTIVE, DEFAULT_COMMIT_MESSAGE_DIRECTIVES);
+  }
+
+  public boolean getAiProjectInstructionsInReviews() {
+    return getBoolean(
+        KEY_AI_PROJECT_INSTRUCTIONS_IN_REVIEWS, DEFAULT_AI_PROJECT_INSTRUCTIONS_IN_REVIEWS);
   }
 
   public boolean isVotingEnabled() {

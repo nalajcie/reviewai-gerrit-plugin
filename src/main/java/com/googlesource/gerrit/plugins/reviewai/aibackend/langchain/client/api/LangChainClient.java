@@ -171,7 +171,7 @@ public class LangChainClient extends AiClientBase implements IAiClient {
     this.tokenEstimatorProvider = new LangChainTokenEstimatorProvider(config);
     this.gerritClient = gerritClient;
     this.gitRepoFiles = gitRepoFiles;
-    this.projectInstructionsAppender = new ProjectInstructionsAppender(gitRepoFiles);
+    this.projectInstructionsAppender = new ProjectInstructionsAppender(gitRepoFiles, config);
     this.localizer = localizer;
     this.pluginDataHandlerProvider = pluginDataHandlerProvider;
     this.chatMemoryStore = chatMemoryStore;

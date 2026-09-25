@@ -652,6 +652,27 @@ public class ConfigurationDefaultsTest {
     assertTrue(configuration.isDefinedKey("commitMessageDirective"));
   }
 
+  @Test
+  public void shouldDefaultAiProjectInstructionsInReviewsToDisabled() {
+    Configuration configuration = createConfiguration();
+
+    assertEquals(false, configuration.getAiProjectInstructionsInReviews());
+  }
+
+  @Test
+  public void shouldAllowProjectToEnableAiProjectInstructionsInReviews() {
+    Config globalCfg = new Config();
+    globalCfg.setBoolean("plugin", PLUGIN_NAME, "aiProjectInstructionsInReviews", false);
+    Config projectCfg = new Config();
+    projectCfg.setBoolean("plugin", PLUGIN_NAME, "aiProjectInstructionsInReviews", true);
+    Configuration configuration =
+        createConfiguration(
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, globalCfg),
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, projectCfg));
+
+    assertEquals(true, configuration.getAiProjectInstructionsInReviews());
+  }
+
   private Configuration createConfiguration() {
     return createConfiguration(new String[] {}, new String[] {});
   }
