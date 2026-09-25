@@ -72,6 +72,8 @@ public class ChangeSetData {
   private transient Map<String, GerritChange> reviewGroupChangesByPrefix = Map.of();
   // Review group summary prepended to the patch when only the triggering change is reviewed.
   private transient String reviewGroupHeader;
+  // Read-only repositories exposed to the on-demand code context tools, resolved once per review.
+  private transient List<CodeContextProject> codeContextProjects = List.of();
 
   // Command variables
   private Boolean forcedReview = false;
@@ -175,6 +177,7 @@ public class ChangeSetData {
     copy.setAiRequestCancellation(aiRequestCancellation);
     copy.setReviewGroupChangesByPrefix(reviewGroupChangesByPrefix);
     copy.setReviewGroupHeader(reviewGroupHeader);
+    copy.setCodeContextProjects(codeContextProjects);
     copy.setForcedReview(forcedReview);
     copy.setForcedTopicReview(forcedTopicReview);
     copy.setReplyFilterEnabled(replyFilterEnabled);

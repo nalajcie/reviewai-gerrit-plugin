@@ -18,6 +18,9 @@ package com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.co
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +31,7 @@ import com.googlesource.gerrit.plugins.reviewai.TestBase;
 import com.googlesource.gerrit.plugins.reviewai.TestResourceLoader;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.GitRepoFiles;
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.CodeContextProject;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -232,8 +236,70 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   }
 
   @Test
+  public void contextProjectPathsResolveToContextRepository() throws Exception {
+    OnDemandCodeContextTools contextTools = codeContextTools();
+    when(gitRepoFiles.getRepositoryFileContent("platform/libs", "abc123", "include/span.h"))
+        .thenReturn("struct span;");
+
+    String output =
+        contextTools.execute(
+            "get_content", "{\"file_path\":\"reviewai-context/platform/libs/include/span.h\"}");
+
+    assertTrue(output.startsWith("NOTE: This file is from the read-only code context project"));
+    assertTrue(output.contains("platform/libs at refs/heads/main"));
+    assertTrue(output.endsWith("struct span;"));
+  }
+
+  @Test
+  public void contextProjectTreeListsRepositoryWithPrefix() throws Exception {
+    OnDemandCodeContextTools contextTools = codeContextTools();
+    when(gitRepoFiles.getRepositoryFileTree("platform/libs", "abc123", "include"))
+        .thenReturn(List.of("include/span.h", "include/vector.h"));
+
+    String output =
+        contextTools.execute("tree", "{\"subdir\":\"reviewai-context/platform/libs/include\"}");
+
+    assertEquals(
+        "reviewai-context/platform/libs/include/span.h\n"
+            + "reviewai-context/platform/libs/include/vector.h",
+        output);
+  }
+
+  @Test
+  public void rootTreeListsContextProjects() throws Exception {
+    OnDemandCodeContextTools contextTools = codeContextTools();
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null)).thenReturn(List.of("main.c"));
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(null);
+
+    assertEquals("main.c\nreviewai-context/platform/libs/...", contextTools.execute("tree", "{}"));
+  }
+
+  @Test
+  public void grepWithContextProjectPathSearchesContextRepository() throws Exception {
+    OnDemandCodeContextTools contextTools = codeContextTools();
+    when(gitRepoFiles.grepRepository("platform/libs", "abc123", "include", "span"))
+        .thenReturn(List.of("include/span.h:1: struct span;"));
+
+    String output =
+        contextTools.execute(
+            "grep", "{\"string\":\"span\",\"path\":\"reviewai-context/platform/libs/include\"}");
+
+    assertEquals("reviewai-context/platform/libs/include/span.h:1: struct span;", output);
+    verify(gitRepoFiles, never()).grepPatchSet(any(), any(), any(), any());
+  }
+
+  @Test
   public void unsupportedToolReturnsEmptyOutput() {
     assertEquals("", tools.execute("get_context", "{}"));
+  }
+
+  private OnDemandCodeContextTools codeContextTools() {
+    return new OnDemandCodeContextTools(
+        config,
+        change,
+        gitRepoFiles,
+        Map.of(),
+        List.of(new CodeContextProject("platform/libs", "refs/heads/main", "abc123")));
   }
 
   private OnDemandCodeContextTools reviewGroupTools(GerritChange member) {

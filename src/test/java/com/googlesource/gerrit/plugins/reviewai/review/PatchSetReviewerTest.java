@@ -127,6 +127,7 @@ public class PatchSetReviewerTest {
             mock(ReviewConcernPublisher.class),
             mock(ReviewFeedbackLifecycle.class),
             mock(AiReviewApplicabilityChecker.class),
+            null,
             null);
 
     reviewer.getReviewReply(change, "diff");
@@ -152,6 +153,7 @@ public class PatchSetReviewerTest {
         mock(ReviewConcernPublisher.class),
         mock(ReviewFeedbackLifecycle.class),
         mock(AiReviewApplicabilityChecker.class),
+        null,
         null);
   }
 

@@ -433,6 +433,7 @@ public class ReviewTestBase extends TestBase {
             new ReviewFeedbackLifecycle(
                 reviewFeedbackPublisher, config, identifiedUserFactory, getAiRoleResolver()),
             aiReviewApplicabilityChecker,
+            null,
             "http://localhost:9575");
     mockConfigCreator = mock(ConfigCreator.class);
   }

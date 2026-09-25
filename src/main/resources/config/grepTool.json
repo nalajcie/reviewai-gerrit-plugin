@@ -1,7 +1,7 @@
 {
   "type": "function",
   "name": "grep",
-  "description": "Search the git project for a literal string and return matching file paths, line numbers, and lines. When the patch merges several changes, every change is searched and each match is reported with the ReviewAI origin prefix of its change (`reviewai-topic-change-<N>/<project>/`).",
+  "description": "Search the git project for a literal string and return matching file paths, line numbers, and lines. When the patch merges several changes, every change is searched and each match is reported with the ReviewAI origin prefix of its change (`reviewai-topic-change-<N>/<project>/`). Set `path` to restrict the results to a path prefix; set it to `reviewai-context/<project>/` or a subdirectory below it to search a read-only code context project instead.",
   "strict": false,
   "parameters": {
     "type": "object",
@@ -9,6 +9,10 @@
       "string": {
         "type": "string",
         "description": "Literal string to search for in the git project."
+      },
+      "path": {
+        "type": "string",
+        "description": "Optional path prefix that restricts the search. Use `reviewai-context/<project>/<subdir>` to search a read-only code context project."
       }
     },
     "required": [

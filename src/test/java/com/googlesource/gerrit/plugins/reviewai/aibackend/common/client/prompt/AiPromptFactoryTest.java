@@ -37,6 +37,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.prompt.c
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.prompt.feedback.AiPromptReviewFeedbackClassification;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.api.gerrit.GerritConditionLabel;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.CodeContextProject;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ReviewAssistantStage;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.ConcernReviewerId;
@@ -623,6 +624,28 @@ public class AiPromptFactoryTest {
             .getDefaultAiAssistantInstructions();
 
     assertFalse(instructions.contains("Use the imperative mood in the subject"));
+  }
+
+  @Test
+  public void onDemandReviewRulesListResolvedCodeContextProjects() {
+    Configuration config = mock(Configuration.class);
+    ChangeSetData changeSetData = new ChangeSetData(1);
+    changeSetData.setCodeContextProjects(
+        List.of(new CodeContextProject("platform/libs", "refs/heads/main", "abc123")));
+
+    String onDemandInstructions =
+        new AiPromptReview(
+                config, changeSetData, patchSetEventChange(), new CodeContextPolicyOnDemand(config))
+            .getDefaultAiAssistantInstructions();
+    String noContextInstructions =
+        new AiPromptReview(
+                config, changeSetData, patchSetEventChange(), new CodeContextPolicyNone(config))
+            .getDefaultAiAssistantInstructions();
+
+    assertTrue(
+        onDemandInstructions.contains(
+            "`reviewai-context/platform/libs/` (platform/libs at refs/heads/main)"));
+    assertFalse(noContextInstructions.contains("reviewai-context/"));
   }
 
   @Test

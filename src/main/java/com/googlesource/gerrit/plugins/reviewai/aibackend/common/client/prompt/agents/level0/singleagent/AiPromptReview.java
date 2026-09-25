@@ -33,6 +33,7 @@ import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.clie
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.prompt.IAiPrompt;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -266,6 +267,22 @@ public class AiPromptReview extends AiPromptBase implements IAiPrompt {
     // Configured directives are never filtered.
     List<String> codeContextPolicyRules = new ArrayList<>();
     codeContextPolicy.addCodeContextPolicyAwareAssistantRule(codeContextPolicyRules);
+    if (!codeContextPolicyRules.isEmpty() && !isEmpty(changeSetData.getCodeContextProjects())) {
+      codeContextPolicyRules.add(
+          String.format(
+              prompt("DEFAULT_AI_ASSISTANT_INSTRUCTIONS_CODE_CONTEXT_PROJECTS"),
+              changeSetData.getCodeContextProjects().stream()
+                  .map(
+                      project ->
+                          "`"
+                              + project.prefix()
+                              + "` ("
+                              + project.project()
+                              + " at "
+                              + project.ref()
+                              + ")")
+                  .collect(Collectors.joining(", "))));
+    }
     List<List<String>> builtInRuleSlots =
         List.of(
             codeContextPolicyRules,

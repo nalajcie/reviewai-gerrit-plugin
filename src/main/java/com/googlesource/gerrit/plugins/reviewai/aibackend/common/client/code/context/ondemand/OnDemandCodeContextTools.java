@@ -24,9 +24,12 @@ import com.google.gson.JsonParser;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.ClientBase;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.GitRepoFiles;
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.CodeContextProject;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +48,9 @@ public class OnDemandCodeContextTools extends ClientBase {
   private static final String CONTEXT_NOT_PROVIDED = "CONTEXT NOT PROVIDED";
   private static final String PREEXISTING_CONTEXT_MARKER =
       "NOTE: This file is pre-existing repository context and is NOT part of the current change.\n\n";
+  private static final String CODE_CONTEXT_PROJECT_MARKER =
+      "NOTE: This file is from the read-only code context project %s at %s and is NOT part of the"
+          + " current change.\n\n";
   private static final Pattern COMMIT_MESSAGE_PATH_PATTERN =
       Pattern.compile("^(?:reviewai-topic-change-.*)?/?COMMIT_MSG$");
   private static final int LOG_MAX_CONTENT_SIZE = 256;
@@ -53,6 +59,7 @@ public class OnDemandCodeContextTools extends ClientBase {
   private final GitRepoFiles gitRepoFiles;
   private final TreeOutputCompressor treeOutputCompressor;
   private final Map<String, GerritChange> reviewGroupChangesByPrefix;
+  private final List<CodeContextProject> codeContextProjects;
   private final Map<GerritChange, Optional<Set<String>>> changedFilesByChange = new HashMap<>();
 
   public OnDemandCodeContextTools(
@@ -70,7 +77,21 @@ public class OnDemandCodeContextTools extends ClientBase {
       GerritChange change,
       GitRepoFiles gitRepoFiles,
       Map<String, GerritChange> reviewGroupChangesByPrefix) {
+    this(config, change, gitRepoFiles, reviewGroupChangesByPrefix, List.of());
+  }
+
+  /**
+   * Creates the tools with read-only code context projects, addressed with paths that start with
+   * {@code reviewai-context/<project>/}.
+   */
+  public OnDemandCodeContextTools(
+      Configuration config,
+      GerritChange change,
+      GitRepoFiles gitRepoFiles,
+      Map<String, GerritChange> reviewGroupChangesByPrefix,
+      List<CodeContextProject> codeContextProjects) {
     super(config);
+    this.codeContextProjects = codeContextProjects == null ? List.of() : codeContextProjects;
     this.change = change;
     this.gitRepoFiles = gitRepoFiles;
     this.treeOutputCompressor = new TreeOutputCompressor();
@@ -115,7 +136,8 @@ public class OnDemandCodeContextTools extends ClientBase {
           switch (toolName) {
             case TREE -> tree(getString(argumentObject, "subdir"));
             case GET_CONTENT -> getContent(getString(argumentObject, "file_path"));
-            case GREP -> grep(getString(argumentObject, "string"));
+            case GREP ->
+                grep(getString(argumentObject, "string"), getString(argumentObject, "path"));
             default -> "";
           };
     } catch (FileNotFoundException e) {
@@ -134,7 +156,13 @@ public class OnDemandCodeContextTools extends ClientBase {
   }
 
   private String tree(String subdir) {
-    if ((subdir == null || subdir.isBlank()) && !reviewGroupChangesByPrefix.isEmpty()) {
+    Optional<ContextPath> contextPath = resolveContextPath(subdir);
+    if (contextPath.isPresent()) {
+      return contextTree(contextPath.get());
+    }
+    boolean root = subdir == null || subdir.isBlank();
+    String output;
+    if (root && !reviewGroupChangesByPrefix.isEmpty()) {
       List<String> paths = new ArrayList<>();
       paths.addAll(treePaths(resolve(subdir)));
       for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
@@ -142,16 +170,47 @@ public class OnDemandCodeContextTools extends ClientBase {
           paths.addAll(treePaths(new ResolvedPath(member.getValue(), member.getKey(), "")));
         }
       }
-      return paths.isEmpty() ? CONTEXT_NOT_PROVIDED : treeOutputCompressor.format(paths, subdir);
+      output = paths.isEmpty() ? "" : treeOutputCompressor.format(paths, subdir);
+    } else {
+      ResolvedPath resolvedPath = resolve(subdir);
+      List<String> paths = treePaths(resolvedPath);
+      output =
+          paths.isEmpty()
+              ? ""
+              : treeOutputCompressor.format(
+                  paths,
+                  resolvedPath.prefix().isEmpty()
+                      ? subdir
+                      : resolvedPath.prefix() + resolvedPath.path());
     }
-    ResolvedPath resolvedPath = resolve(subdir);
-    List<String> paths = treePaths(resolvedPath);
-    if (paths.isEmpty()) {
+    if (root && !codeContextProjects.isEmpty()) {
+      List<String> lines = new ArrayList<>();
+      if (!output.isEmpty()) {
+        lines.add(output);
+      }
+      codeContextProjects.forEach(project -> lines.add(project.prefix() + "..."));
+      output = String.join("\n", lines);
+    }
+    return output.isEmpty() ? CONTEXT_NOT_PROVIDED : output;
+  }
+
+  private String contextTree(ContextPath contextPath) {
+    CodeContextProject project = contextPath.project();
+    try {
+      List<String> paths =
+          gitRepoFiles
+              .getRepositoryFileTree(project.project(), project.commitId(), contextPath.path())
+              .stream()
+              .map(path -> project.prefix() + path)
+              .toList();
+      if (paths.isEmpty()) {
+        return CONTEXT_NOT_PROVIDED;
+      }
+      return treeOutputCompressor.format(paths, project.prefix() + contextPath.path());
+    } catch (IOException e) {
+      log.warn("Could not list code context project {}", project.project(), e);
       return CONTEXT_NOT_PROVIDED;
     }
-    return treeOutputCompressor.format(
-        paths,
-        resolvedPath.prefix().isEmpty() ? subdir : resolvedPath.prefix() + resolvedPath.path());
   }
 
   private List<String> treePaths(ResolvedPath resolvedPath) {
@@ -171,6 +230,16 @@ public class OnDemandCodeContextTools extends ClientBase {
     if (filePath == null || filePath.isBlank() || isCommitMessagePath(filePath)) {
       return CONTEXT_NOT_PROVIDED;
     }
+    Optional<ContextPath> contextPath = resolveContextPath(filePath);
+    if (contextPath.isPresent()) {
+      CodeContextProject project = contextPath.get().project();
+      if (contextPath.get().path().isEmpty()) {
+        return CONTEXT_NOT_PROVIDED;
+      }
+      return String.format(CODE_CONTEXT_PROJECT_MARKER, project.project(), project.ref())
+          + gitRepoFiles.getRepositoryFileContent(
+              project.project(), project.commitId(), contextPath.get().path());
+    }
     ResolvedPath resolvedPath = resolve(filePath);
     if (resolvedPath.path().isBlank()) {
       return CONTEXT_NOT_PROVIDED;
@@ -188,14 +257,27 @@ public class OnDemandCodeContextTools extends ClientBase {
     return COMMIT_MESSAGE_PATH_PATTERN.matcher(filePath).matches();
   }
 
-  private String grep(String string) {
+  private String grep(String string, String path) throws IOException {
     if (string == null || string.isEmpty()) {
       return CONTEXT_NOT_PROVIDED;
     }
-    List<String> matches = new ArrayList<>(grep(resolve(null), string));
-    for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
-      if (member.getValue() != change) {
-        matches.addAll(grep(new ResolvedPath(member.getValue(), member.getKey(), ""), string));
+    Optional<ContextPath> contextPath = resolveContextPath(path);
+    List<String> matches = new ArrayList<>();
+    if (contextPath.isPresent()) {
+      CodeContextProject project = contextPath.get().project();
+      gitRepoFiles
+          .grepRepository(project.project(), project.commitId(), contextPath.get().path(), string)
+          .forEach(match -> matches.add(project.prefix() + match));
+    } else {
+      matches.addAll(grep(resolve(null), string));
+      for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
+        if (member.getValue() != change) {
+          matches.addAll(grep(new ResolvedPath(member.getValue(), member.getKey(), ""), string));
+        }
+      }
+      String pathFilter = path == null ? "" : path.replaceAll("^/+", "");
+      if (!pathFilter.isEmpty()) {
+        matches.removeIf(match -> !match.startsWith(pathFilter));
       }
     }
     if (matches.isEmpty()) {
@@ -240,6 +322,31 @@ public class OnDemandCodeContextTools extends ClientBase {
   }
 
   private record ResolvedPath(GerritChange change, String prefix, String path) {}
+
+  /** Resolves a tool path that starts with {@code reviewai-context/<project>/}. */
+  private Optional<ContextPath> resolveContextPath(String path) {
+    if (path == null || codeContextProjects.isEmpty()) {
+      return Optional.empty();
+    }
+    String normalizedPath = path.replaceAll("^/+", "");
+    return codeContextProjects.stream()
+        .filter(
+            project ->
+                normalizedPath.startsWith(project.prefix())
+                    || normalizedPath.equals(
+                        project.prefix().substring(0, project.prefix().length() - 1)))
+        // Prefer the longest prefix when a project name is a path prefix of another one.
+        .max(Comparator.comparingInt(project -> project.prefix().length()))
+        .map(
+            project ->
+                new ContextPath(
+                    project,
+                    normalizedPath.length() > project.prefix().length()
+                        ? normalizedPath.substring(project.prefix().length())
+                        : ""));
+  }
+
+  private record ContextPath(CodeContextProject project, String path) {}
 
   private static JsonObject parseArguments(String arguments) {
     if (arguments == null || arguments.isBlank()) {

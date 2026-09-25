@@ -673,6 +673,22 @@ public class ConfigurationDefaultsTest {
     assertEquals(true, configuration.getAiProjectInstructionsInReviews());
   }
 
+  @Test
+  public void shouldMergeGlobalAndProjectCodeContextProjects() {
+    Config globalCfg = new Config();
+    globalCfg.setStringList("plugin", PLUGIN_NAME, "codeContextProject", List.of("common-libs"));
+    Config projectCfg = new Config();
+    projectCfg.setStringList(
+        "plugin", PLUGIN_NAME, "codeContextProject", List.of("dsp-libs:refs/heads/main"));
+    Configuration configuration =
+        createConfiguration(
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, globalCfg),
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, projectCfg));
+
+    assertEquals(
+        List.of("common-libs", "dsp-libs:refs/heads/main"), configuration.getCodeContextProject());
+  }
+
   private Configuration createConfiguration() {
     return createConfiguration(new String[] {}, new String[] {});
   }

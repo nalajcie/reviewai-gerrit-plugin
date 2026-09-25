@@ -199,7 +199,11 @@ class LangChainExecutor {
         arguments);
     OnDemandCodeContextTools codeContextTools =
         new OnDemandCodeContextTools(
-            config, change, gitRepoFiles, changeSetData.getReviewGroupChangesByPrefix());
+            config,
+            change,
+            gitRepoFiles,
+            changeSetData.getReviewGroupChangesByPrefix(),
+            changeSetData.getCodeContextProjects());
     String output = codeContextTools.execute(toolName, arguments);
     log.debug(
         "Executed LangChain request id={}, name={}, outputLength={}",

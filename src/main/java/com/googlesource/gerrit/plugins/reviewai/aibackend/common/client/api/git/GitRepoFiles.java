@@ -22,6 +22,7 @@ import static com.googlesource.gerrit.plugins.reviewai.utils.GsonUtils.getGson;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.gerrit.entities.Change;
 import com.google.gerrit.entities.PatchSet;
+import com.google.gerrit.entities.Project;
 import com.google.gerrit.server.git.GitRepositoryManager;
 import com.google.inject.Inject;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
@@ -36,15 +37,31 @@ import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
+import org.eclipse.jgit.diff.RawText;
 import org.eclipse.jgit.lib.*;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.treewalk.filter.PathFilter;
 import org.eclipse.jgit.treewalk.filter.TreeFilter;
 
 @Slf4j
 public class GitRepoFiles {
+  /** Maximum number of paths listed from a code context project. */
+  public static final int CONTEXT_MAX_TREE_ENTRIES = 2000;
+
+  /** Maximum size of a code context project file that is read or searched. */
+  public static final int CONTEXT_MAX_FILE_BYTES = 512 * 1024;
+
+  /** Maximum number of code context project files searched by one grep. */
+  public static final int CONTEXT_MAX_GREP_FILES = 5000;
+
+  /** Maximum number of matches returned by one grep in a code context project. */
+  public static final int CONTEXT_MAX_GREP_MATCHES = 200;
+
+  private static final String LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/";
+
   private final GitRepositoryManager repositoryManager;
 
   @Inject
@@ -133,6 +150,128 @@ public class GitRepoFiles {
     } catch (IOException e) {
       throw new RuntimeException("Failed to search repository", e);
     }
+  }
+
+  /**
+   * Lists the files of a project at a commit, below {@code subdir} when given, bounded by {@link
+   * #CONTEXT_MAX_TREE_ENTRIES}.
+   */
+  public List<String> getRepositoryFileTree(String project, String commitId, String subdir)
+      throws IOException {
+    String normalizedSubdir = normalizePath(subdir);
+    return withCommitTree(
+        project,
+        commitId,
+        (repository, tree, reader) -> {
+          List<String> paths = new ArrayList<>();
+          try (TreeWalk treeWalk = newRecursiveTreeWalk(repository, tree, normalizedSubdir)) {
+            while (treeWalk.next() && paths.size() < CONTEXT_MAX_TREE_ENTRIES) {
+              paths.add(treeWalk.getPathString());
+            }
+          }
+          return paths;
+        });
+  }
+
+  /**
+   * Returns a text file of a project at a commit. Binary files, Git LFS pointers, submodules and
+   * files larger than {@link #CONTEXT_MAX_FILE_BYTES} are reported as not found.
+   */
+  public String getRepositoryFileContent(String project, String commitId, String path)
+      throws FileNotFoundException {
+    String normalizedPath = normalizePath(path);
+    try {
+      String content =
+          withCommitTree(
+              project,
+              commitId,
+              (repository, tree, reader) -> {
+                try (TreeWalk treeWalk = TreeWalk.forPath(reader, normalizedPath, tree)) {
+                  return treeWalk == null ? null : readContextFile(reader, treeWalk);
+                }
+              });
+      if (content == null) {
+        throw new FileNotFoundException("File not available: " + path);
+      }
+      return content;
+    } catch (IOException e) {
+      throw new FileNotFoundException("File not found: " + path);
+    }
+  }
+
+  /**
+   * Searches the text files of a project at a commit, below {@code subdir} when given, for a
+   * literal string. The search is bounded by {@link #CONTEXT_MAX_GREP_FILES} and {@link
+   * #CONTEXT_MAX_GREP_MATCHES}, and skips the files that {@link #getRepositoryFileContent} rejects.
+   */
+  public List<String> grepRepository(
+      String project, String commitId, String subdir, String searchString) throws IOException {
+    if (searchString == null || searchString.isEmpty()) {
+      return Collections.emptyList();
+    }
+    String normalizedSubdir = normalizePath(subdir);
+    return withCommitTree(
+        project,
+        commitId,
+        (repository, tree, reader) -> {
+          List<String> matches = new ArrayList<>();
+          int searchedFiles = 0;
+          try (TreeWalk treeWalk = newRecursiveTreeWalk(repository, tree, normalizedSubdir)) {
+            while (treeWalk.next()
+                && searchedFiles < CONTEXT_MAX_GREP_FILES
+                && matches.size() < CONTEXT_MAX_GREP_MATCHES) {
+              String content = readContextFile(reader, treeWalk);
+              if (content == null) {
+                continue;
+              }
+              searchedFiles++;
+              addGrepMatches(matches, treeWalk.getPathString(), content, searchString);
+            }
+          }
+          return matches.size() > CONTEXT_MAX_GREP_MATCHES
+              ? new ArrayList<>(matches.subList(0, CONTEXT_MAX_GREP_MATCHES))
+              : matches;
+        });
+  }
+
+  private <T> T withCommitTree(
+      String project, String commitId, RepositoryTreeReaderCallback<T> callback)
+      throws IOException {
+    if (repositoryManager == null) {
+      throw new IOException("GitRepositoryManager is not available");
+    }
+    try (Repository repository = repositoryManager.openRepository(Project.nameKey(project));
+        RevWalk revWalk = new RevWalk(repository);
+        ObjectReader reader = repository.newObjectReader()) {
+      RevTree tree = revWalk.parseCommit(ObjectId.fromString(commitId)).getTree();
+      return callback.execute(repository, tree, reader);
+    }
+  }
+
+  private TreeWalk newRecursiveTreeWalk(Repository repository, RevTree tree, String subdir)
+      throws IOException {
+    TreeWalk treeWalk = newRecursiveTreeWalk(repository, tree);
+    if (!subdir.isEmpty()) {
+      treeWalk.setFilter(PathFilter.create(subdir));
+    }
+    return treeWalk;
+  }
+
+  private static String readContextFile(ObjectReader reader, TreeWalk treeWalk) throws IOException {
+    FileMode mode = treeWalk.getFileMode(0);
+    if (mode != FileMode.REGULAR_FILE && mode != FileMode.EXECUTABLE_FILE) {
+      return null;
+    }
+    ObjectLoader loader = reader.open(treeWalk.getObjectId(0));
+    if (loader.getSize() > CONTEXT_MAX_FILE_BYTES) {
+      return null;
+    }
+    byte[] bytes = loader.getBytes();
+    if (RawText.isBinary(bytes)) {
+      return null;
+    }
+    String content = new String(bytes, StandardCharsets.UTF_8);
+    return content.startsWith(LFS_POINTER_PREFIX) ? null : content;
   }
 
   private List<Map<String, String>> listFilesWithContent(

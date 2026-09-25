@@ -31,6 +31,7 @@ import com.googlesource.gerrit.plugins.reviewai.TestBase;
 import com.googlesource.gerrit.plugins.reviewai.TestResourceLoader;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -246,6 +247,77 @@ public class GitRepoFilesTest extends TestBase {
     when(config.getEnabledFileExtensions()).thenReturn(List.of(extension));
     when(config.getDisabledFileExtensions()).thenReturn(List.of());
     return config;
+  }
+
+  @Test
+  public void codeContextProjectTreeHonoursSubdirectory() throws Exception {
+    try (Git git = createRepository()) {
+      RevCommit commit = commitContextProjectFiles(git);
+      GitRepoFiles gitRepoFiles = new GitRepoFiles(repositoryManager(git));
+
+      assertEquals(
+          List.of("include/big.h", "include/image.bin", "include/lfs.h", "include/span.h"),
+          gitRepoFiles.getRepositoryFileTree("libs", commit.name(), "include/"));
+    }
+  }
+
+  @Test
+  public void codeContextProjectGrepSkipsBinaryLfsAndLargeFiles() throws Exception {
+    try (Git git = createRepository()) {
+      RevCommit commit = commitContextProjectFiles(git);
+      GitRepoFiles gitRepoFiles = new GitRepoFiles(repositoryManager(git));
+
+      assertEquals(
+          List.of("include/span.h:1: struct span_marker;"),
+          gitRepoFiles.grepRepository("libs", commit.name(), "include", "span_marker"));
+      assertEquals(
+          List.of("src/span.c:1: // span_marker usage"),
+          gitRepoFiles.grepRepository("libs", commit.name(), "src", "span_marker"));
+    }
+  }
+
+  @Test
+  public void codeContextProjectContentRejectsBinaryAndLfsFiles() throws Exception {
+    try (Git git = createRepository()) {
+      RevCommit commit = commitContextProjectFiles(git);
+      GitRepoFiles gitRepoFiles = new GitRepoFiles(repositoryManager(git));
+
+      assertEquals(
+          "struct span_marker;\n",
+          gitRepoFiles.getRepositoryFileContent("libs", commit.name(), "include/span.h"));
+      assertThrows(
+          FileNotFoundException.class,
+          () -> gitRepoFiles.getRepositoryFileContent("libs", commit.name(), "include/lfs.h"));
+      assertThrows(
+          FileNotFoundException.class,
+          () -> gitRepoFiles.getRepositoryFileContent("libs", commit.name(), "include/image.bin"));
+      assertThrows(
+          FileNotFoundException.class,
+          () -> gitRepoFiles.getRepositoryFileContent("libs", commit.name(), "include/big.h"));
+    }
+  }
+
+  private RevCommit commitContextProjectFiles(Git git) throws Exception {
+    Path workTree = git.getRepository().getWorkTree().toPath();
+    Files.createDirectories(workTree.resolve("include"));
+    Files.createDirectories(workTree.resolve("src"));
+    Files.writeString(workTree.resolve("include/span.h"), "struct span_marker;\n");
+    Files.writeString(
+        workTree.resolve("include/lfs.h"),
+        "version https://git-lfs.github.com/spec/v1\noid sha256:span_marker\nsize 12\n");
+    Files.write(workTree.resolve("include/image.bin"), new byte[] {'s', 0, 'p', 'a', 'n'});
+    Files.writeString(
+        workTree.resolve("include/big.h"),
+        "span_marker\n".repeat(GitRepoFiles.CONTEXT_MAX_FILE_BYTES / 12 + 1));
+    Files.writeString(workTree.resolve("src/span.c"), "// span_marker usage\n");
+    git.add().addFilepattern(".").call();
+    return git.commit().setMessage("Context files").setAuthor("Test", "test@example.com").call();
+  }
+
+  private static GitRepositoryManager repositoryManager(Git git) throws Exception {
+    GitRepositoryManager repositoryManager = mock(GitRepositoryManager.class);
+    when(repositoryManager.openRepository(Project.nameKey("libs"))).thenReturn(git.getRepository());
+    return repositoryManager;
   }
 
   private Git createRepository() throws Exception {

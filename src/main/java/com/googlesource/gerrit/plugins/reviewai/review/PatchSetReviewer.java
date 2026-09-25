@@ -22,6 +22,7 @@ import com.google.inject.Provider;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritClient;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritClientReview;
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.context.ondemand.CodeContextProjectResolver;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.messages.debug.DebugCodeBlocksReview;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.messages.review.RepeatedCommentReferenceFormatter;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.patch.comment.GerritCommentRange;
@@ -70,6 +71,7 @@ public class PatchSetReviewer {
   private final ReviewConcernPublisher reviewConcernPublisher;
   private final ReviewFeedbackLifecycle reviewFeedbackLifecycle;
   private final AiReviewApplicabilityChecker aiReviewApplicabilityChecker;
+  private final CodeContextProjectResolver codeContextProjectResolver;
 
   private GerritCommentRange gerritCommentRange;
   private List<ReviewBatch> reviewBatches;
@@ -88,6 +90,7 @@ public class PatchSetReviewer {
       ReviewConcernPublisher reviewConcernPublisher,
       ReviewFeedbackLifecycle reviewFeedbackLifecycle,
       AiReviewApplicabilityChecker aiReviewApplicabilityChecker,
+      CodeContextProjectResolver codeContextProjectResolver,
       @CanonicalWebUrl @Nullable String canonicalWebUrl) {
     this.config = config;
     this.gerritClient = gerritClient;
@@ -99,6 +102,7 @@ public class PatchSetReviewer {
     this.reviewConcernPublisher = reviewConcernPublisher;
     this.reviewFeedbackLifecycle = reviewFeedbackLifecycle;
     this.aiReviewApplicabilityChecker = aiReviewApplicabilityChecker;
+    this.codeContextProjectResolver = codeContextProjectResolver;
     this.repeatedCommentReferenceFormatter =
         new RepeatedCommentReferenceFormatter(
             gerritClient, changeSetData, localizer, canonicalWebUrl);
@@ -403,6 +407,10 @@ public class PatchSetReviewer {
         aiReviewConditionMet
             ? gerritClient.getConditionLabels(change, config.getAiReviewApplicableIf())
             : Map.of());
+    changeSetData.setCodeContextProjects(
+        codeContextProjectResolver == null
+            ? List.of()
+            : codeContextProjectResolver.resolve(config));
     AiResponseContent response = openAiClient.ask(changeSetData, change, patchSet);
     changeSetData.getAiRequestCancellation().throwIfSupersessionRequested();
     return response;
