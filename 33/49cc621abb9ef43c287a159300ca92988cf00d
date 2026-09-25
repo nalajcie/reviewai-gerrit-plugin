@@ -1,0 +1,33 @@
+src/dev/test/java/com/googlesource/gerrit/plugins/reviewai/ConfigurationDefaultsTest.java
+  s_99ebfbf269eb4b::t_7e7fab348785c5 629-654
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/agents/level0/singleagent/AiPromptReview.java
+  s_99ebfbf269eb4b::t_c1095ac949c818 93,147,166-183
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/agents/level1/commitmessage/AiPromptReviewCommitMessage.java
+  s_99ebfbf269eb4b::t_5ddeaf23bfb4a9 88
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/agents/level2/AiPromptSpecializedReviewAgent.java
+  s_99ebfbf269eb4b::t_7da1e36dc3683f 108
+src/main/java/com/googlesource/gerrit/plugins/reviewai/config/Configuration.java
+  s_99ebfbf269eb4b::t_be5e603edb1e42 86,114,129,330-333
+src/main/resources/config/agents/level0/single-agent/prompts.json
+  s_99ebfbf269eb4b::t_a591cd2700bdcd 10
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/AiPromptFactoryTest.java
+  s_99ebfbf269eb4b::t_34878ac5cd2074 566-627
+src/test/resources/__files/commands/dumpConfig.txt
+  s_99ebfbf269eb4b::t_cc69498ff40360 30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3349cc621abb9ef43c287a159300ca92988cf00d",
+  "prompts": {},
+  "sessions": {
+    "s_99ebfbf269eb4b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3bc8480-1401-4289-98e9-b54aae12878c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
