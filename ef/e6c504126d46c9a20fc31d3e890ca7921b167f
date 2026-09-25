@@ -1,0 +1,23 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/agents/level2/AiPromptSpecializedReviewAgent.java
+  s_99ebfbf269eb4b::t_59f86bbfb681bf 60,100
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/AiPromptFactoryTest.java
+  s_99ebfbf269eb4b::t_8527df2cb59a2f 536-565
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/agents/level2/LangChainSpecializedAgentReviewClientTest.java
+  s_99ebfbf269eb4b::t_17fc61f723e165 1266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "efe6c504126d46c9a20fc31d3e890ca7921b167f",
+  "prompts": {},
+  "sessions": {
+    "s_99ebfbf269eb4b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3bc8480-1401-4289-98e9-b54aae12878c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
