@@ -85,7 +85,7 @@ public class AiPromptReviewCommitMessage extends AiPromptReview implements IAiPr
     sections.add(
         buildSection(
             prompt("DEFAULT_AI_REVIEW_SECTION_TITLE_COMMIT_MESSAGE_REVIEW_REQUIREMENT"),
-            getReviewPromptCommitMessages()));
+            getCommitMessageReviewRequirement()));
     sections.add(
         buildSection(
             prompt("DEFAULT_AI_REVIEW_SECTION_TITLE_FIELD_DEFINITIONS"),

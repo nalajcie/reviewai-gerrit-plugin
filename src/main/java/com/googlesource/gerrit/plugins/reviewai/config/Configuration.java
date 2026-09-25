@@ -83,6 +83,7 @@ public class Configuration extends ConfigCore {
           });
   private static final String DEFAULT_DISABLED_FILE_EXTENSIONS = "";
   private static final List<String> DEFAULT_DIRECTIVES = new ArrayList<>();
+  private static final List<String> DEFAULT_COMMIT_MESSAGE_DIRECTIVES = new ArrayList<>();
   private static final int DEFAULT_MAX_REVIEW_LINES = 1000;
   private static final int DEFAULT_PATCH_CONTEXT_LINES = 3;
   private static final boolean DEFAULT_ENABLED_VOTING = false;
@@ -110,6 +111,7 @@ public class Configuration extends ConfigCore {
   public static final String KEY_AI_REVIEW_TEMPERATURE = "aiReviewTemperature";
   public static final String KEY_AI_COMMENT_TEMPERATURE = "aiCommentTemperature";
   public static final String KEY_DIRECTIVES = "directive";
+  public static final String KEY_COMMIT_MESSAGE_DIRECTIVE = "commitMessageDirective";
   public static final String KEY_GERRIT_USERNAME = "gerritUserName";
   public static final String KEY_SELECTIVE_LOG_LEVEL_OVERRIDE = "selectiveLogLevelOverride";
   public static final String KEY_MOCK_AI_ADDRESS = "mockAiAddress";
@@ -124,6 +126,7 @@ public class Configuration extends ConfigCore {
   public static final Set<String> LIST_TYPE_ENTRY_KEYS =
       Set.of(
           KEY_DIRECTIVES,
+          KEY_COMMIT_MESSAGE_DIRECTIVE,
           KEY_SELECTIVE_LOG_LEVEL_OVERRIDE,
           KEY_AI_PROVIDER,
           KEY_AI_MODELS,
@@ -324,6 +327,10 @@ public class Configuration extends ConfigCore {
 
   public List<String> getDirective() {
     return splitListIntoItems(KEY_DIRECTIVES, DEFAULT_DIRECTIVES);
+  }
+
+  public List<String> getCommitMessageDirective() {
+    return splitListIntoItems(KEY_COMMIT_MESSAGE_DIRECTIVE, DEFAULT_COMMIT_MESSAGE_DIRECTIVES);
   }
 
   public boolean isVotingEnabled() {

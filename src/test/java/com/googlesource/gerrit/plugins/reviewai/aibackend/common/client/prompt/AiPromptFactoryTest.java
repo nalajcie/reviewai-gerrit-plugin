@@ -564,6 +564,68 @@ public class AiPromptFactoryTest {
   }
 
   @Test
+  public void commitMessageDirectivesApplyOnlyToCommitMessageReviews() {
+    String commitMessageRule = "RULE #1: Use the imperative mood in the subject";
+    Configuration config = mock(Configuration.class);
+    when(config.getAiReviewCommitMessages()).thenReturn(true);
+    when(config.getCommitMessageDirective())
+        .thenReturn(List.of("Use the imperative mood in the subject"));
+
+    String singleAgentInstructions =
+        new AiPromptReview(
+                config, new ChangeSetData(1), patchSetEventChange(), mock(ICodeContextPolicy.class))
+            .getDefaultAiAssistantInstructions();
+    String scopedCommitMessageInstructions =
+        new AiPromptReviewCommitMessage(
+                config, new ChangeSetData(1), patchSetEventChange(), mock(ICodeContextPolicy.class))
+            .getDefaultAiAssistantInstructions();
+    String scopedPatchSetInstructions =
+        new AiPromptReviewCode(
+                config, new ChangeSetData(1), patchSetEventChange(), mock(ICodeContextPolicy.class))
+            .getDefaultAiAssistantInstructions();
+    ChangeSetData specializedCommitMessage = new ChangeSetData(1);
+    specializedCommitMessage.setSpecializedAgentReview(true);
+    String specializedCommitMessageInstructions =
+        new AiPromptSpecializedReviewAgent(
+                config,
+                specializedCommitMessage,
+                patchSetEventChange(),
+                mock(ICodeContextPolicy.class))
+            .getDefaultAiAssistantInstructions();
+    ChangeSetData specializedPatchSet = new ChangeSetData(1);
+    specializedPatchSet.setSpecializedAgentName("CORRECTNESS");
+    specializedPatchSet.setSpecializedAgentInstructions("Review correctness only.");
+    String specializedPatchSetInstructions =
+        new AiPromptSpecializedReviewAgent(
+                config, specializedPatchSet, patchSetEventChange(), mock(ICodeContextPolicy.class))
+            .getDefaultAiAssistantInstructions();
+
+    assertTrue(singleAgentInstructions.contains(commitMessageRule));
+    assertTrue(
+        singleAgentInstructions.indexOf(commitMessageRule)
+            > singleAgentInstructions.indexOf("# Commit Message Review Requirement"));
+    assertTrue(scopedCommitMessageInstructions.contains(commitMessageRule));
+    assertTrue(specializedCommitMessageInstructions.contains(commitMessageRule));
+    assertFalse(scopedPatchSetInstructions.contains(commitMessageRule));
+    assertFalse(specializedPatchSetInstructions.contains(commitMessageRule));
+  }
+
+  @Test
+  public void commitMessageDirectivesAreOmittedWhenCommitMessagesAreNotReviewed() {
+    Configuration config = mock(Configuration.class);
+    when(config.getAiReviewCommitMessages()).thenReturn(false);
+    when(config.getCommitMessageDirective())
+        .thenReturn(List.of("Use the imperative mood in the subject"));
+
+    String instructions =
+        new AiPromptReview(
+                config, new ChangeSetData(1), patchSetEventChange(), mock(ICodeContextPolicy.class))
+            .getDefaultAiAssistantInstructions();
+
+    assertFalse(instructions.contains("Use the imperative mood in the subject"));
+  }
+
+  @Test
   public void suggestPromptsAreLoadedFromResources() {
     ChangeSetData changeSetData = new ChangeSetData(1);
     changeSetData.setForcedReview(true);

@@ -27,6 +27,7 @@ aiReviewTemperature: 0.2
 aiSystemPromptInstructions: Act as a PatchSet Reviewer
 aiUploadedChunkSizeMb: 5
 codeContextPolicy: ON_DEMAND
+commitMessageDirective:
 convertNeutralReviewScoreToPositive: true
 directive:
 disabledFileExtensions:

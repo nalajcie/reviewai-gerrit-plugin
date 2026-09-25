@@ -90,7 +90,7 @@ public class AiPromptReview extends AiPromptBase implements IAiPrompt {
   public void addAiAssistantInstructions(List<String> instructions) {
     addReviewInstructions(instructions);
     if (includeCommitMessageReviewRequirement()) {
-      instructions.add(getReviewPromptCommitMessages());
+      instructions.add(getCommitMessageReviewRequirement());
       instructions.add(prompt("DEFAULT_AI_ASSISTANT_INSTRUCTIONS_COMMIT_MESSAGES_LOCATION"));
     }
     log.debug("AI Assistant Review Instructions added: {}", instructions);
@@ -144,7 +144,7 @@ public class AiPromptReview extends AiPromptBase implements IAiPrompt {
       sections.add(
           buildSection(
               prompt("DEFAULT_AI_REVIEW_SECTION_TITLE_COMMIT_MESSAGE_REVIEW_REQUIREMENT"),
-              getReviewPromptCommitMessages()));
+              getCommitMessageReviewRequirement()));
     }
 
     String compiledInstructions = joinWithDoubleNewLine(sections);
@@ -161,6 +161,24 @@ public class AiPromptReview extends AiPromptBase implements IAiPrompt {
 
   protected boolean includeCommitMessageReviewRequirement() {
     return config.getAiReviewCommitMessages();
+  }
+
+  /**
+   * Returns the commit message review requirement followed by the configured commit message
+   * directives, which are mandatory rules that apply only to the commit message review.
+   */
+  protected String getCommitMessageReviewRequirement() {
+    String requirement = getReviewPromptCommitMessages();
+    List<String> commitMessageDirectives = config.getCommitMessageDirective();
+    if (isEmpty(commitMessageDirectives)) {
+      return requirement;
+    }
+    return joinWithDoubleNewLine(
+        List.of(
+            requirement,
+            prompt("DEFAULT_AI_ASSISTANT_INSTRUCTIONS_COMMIT_MESSAGE_DIRECTIVES"),
+            joinWithNewLine(
+                getNumberedList(commitMessageDirectives, RULE_NUMBER_PREFIX, COLON_SPACE))));
   }
 
   protected String resolveCommitMessageInstructions(String fallbackPrompt) {

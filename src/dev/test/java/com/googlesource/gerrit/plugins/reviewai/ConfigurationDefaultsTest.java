@@ -626,6 +626,32 @@ public class ConfigurationDefaultsTest {
     assertEquals(0, configuration.getOllamaResponseLength());
   }
 
+  @Test
+  public void shouldDefaultCommitMessageDirectiveToEmpty() {
+    Configuration configuration = createConfiguration();
+
+    assertEquals(List.of(), configuration.getCommitMessageDirective());
+  }
+
+  @Test
+  public void shouldMergeGlobalAndProjectCommitMessageDirectives() {
+    Config globalCfg = new Config();
+    globalCfg.setStringList(
+        "plugin", PLUGIN_NAME, "commitMessageDirective", List.of("Global rule"));
+    Config projectCfg = new Config();
+    projectCfg.setStringList(
+        "plugin", PLUGIN_NAME, "commitMessageDirective", List.of("Project rule 1", "Project rule 2"));
+    Configuration configuration =
+        createConfiguration(
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, globalCfg),
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, projectCfg));
+
+    assertEquals(
+        List.of("Global rule", "Project rule 1", "Project rule 2"),
+        configuration.getCommitMessageDirective());
+    assertTrue(configuration.isDefinedKey("commitMessageDirective"));
+  }
+
   private Configuration createConfiguration() {
     return createConfiguration(new String[] {}, new String[] {});
   }
