@@ -31,6 +31,15 @@ public class GerritClientPatchSetHelper {
   private static final Pattern DIFF_START_PATTERN = Pattern.compile("(?m)^diff --git ");
   private static final Pattern EXTRACT_B_FILENAMES_FROM_PATCH_SET =
       Pattern.compile("^diff --git .*? b/(.*)$", Pattern.MULTILINE);
+  private static final Pattern GITLINK_MODE_PATTERN =
+      Pattern.compile(
+          "(?m)^(?:index \\S+ 160000|(?:new|deleted) file mode 160000|(?:old|new) mode 160000)$");
+  private static final Pattern OLD_GITLINK_COMMIT_PATTERN =
+      Pattern.compile("(?m)^-Subproject commit (\\S+)$");
+  private static final Pattern NEW_GITLINK_COMMIT_PATTERN =
+      Pattern.compile("(?m)^\\+Subproject commit (\\S+)$");
+  private static final String NO_GITLINK_COMMIT = "(none)";
+  public static final String GITLINK_LINE_PREFIX = "submodule ";
   private static final String GERRIT_COMMIT_MESSAGE_PATTERN =
       "^.*?" + GERRIT_COMMIT_MESSAGE_PREFIX + "(?:\\[[^\\]]+\\] )?";
 
@@ -75,26 +84,31 @@ public class GerritClientPatchSetHelper {
       String formattedPatch,
       List<String> enabledFileExtensions,
       List<String> disabledFileExtensions) {
-    Matcher diffStartMatcher = DIFF_START_PATTERN.matcher(formattedPatch);
-    if (!diffStartMatcher.find()) {
+    return filterPatchByEnabledFileExtensions(
+        formattedPatch, enabledFileExtensions, disabledFileExtensions, false);
+  }
+
+  /**
+   * Filters the patch sections by file extension. When {@code keepGitlinks} is set, sections that
+   * update a gitlink (submodule pointer) are kept regardless of the extension filters.
+   */
+  public static String filterPatchByEnabledFileExtensions(
+      String formattedPatch,
+      List<String> enabledFileExtensions,
+      List<String> disabledFileExtensions,
+      boolean keepGitlinks) {
+    List<Integer> diffSectionStarts = diffSectionStarts(formattedPatch);
+    if (diffSectionStarts.isEmpty()) {
       return formattedPatch;
     }
 
-    List<Integer> diffSectionStarts = new ArrayList<>();
-    diffSectionStarts.add(diffStartMatcher.start());
-    while (diffStartMatcher.find()) {
-      diffSectionStarts.add(diffStartMatcher.start());
-    }
-
     StringBuilder filteredPatch = new StringBuilder();
-    filteredPatch.append(formattedPatch, 0, diffSectionStarts.get(0));
-    diffSectionStarts.add(formattedPatch.length());
-    for (int i = 0; i < diffSectionStarts.size() - 1; i++) {
-      String diffSection =
-          formattedPatch.substring(diffSectionStarts.get(i), diffSectionStarts.get(i + 1));
+    filteredPatch.append(formattedPatch, 0, diffSectionStarts.getFirst());
+    for (String diffSection : diffSections(formattedPatch, diffSectionStarts)) {
       String filename = extractFilenameFromPatchSection(diffSection);
       if (filename != null
-          && isFileExtensionEnabled(filename, enabledFileExtensions, disabledFileExtensions)) {
+          && ((keepGitlinks && isGitlinkSection(diffSection))
+              || isFileExtensionEnabled(filename, enabledFileExtensions, disabledFileExtensions))) {
         filteredPatch.append(diffSection);
       }
     }
@@ -102,6 +116,67 @@ public class GerritClientPatchSetHelper {
     String result = filteredPatch.toString();
     log.debug("Patch filtered by enabled file extensions: {}", result);
     return result;
+  }
+
+  /**
+   * Replaces each gitlink (submodule pointer) diff section with a single readable line of the form
+   * {@code submodule <path>: <old-sha> -> <new-sha>}, keeping the {@code diff --git} header so that
+   * the section is still attributed to its path.
+   */
+  public static String renderGitlinkDiffs(String formattedPatch) {
+    List<Integer> diffSectionStarts = diffSectionStarts(formattedPatch);
+    if (diffSectionStarts.isEmpty()) {
+      return formattedPatch;
+    }
+    StringBuilder renderedPatch = new StringBuilder();
+    renderedPatch.append(formattedPatch, 0, diffSectionStarts.getFirst());
+    for (String diffSection : diffSections(formattedPatch, diffSectionStarts)) {
+      String filename = extractFilenameFromPatchSection(diffSection);
+      if (filename == null || !GITLINK_MODE_PATTERN.matcher(diffSection).find()) {
+        renderedPatch.append(diffSection);
+        continue;
+      }
+      String header = diffSection.lines().findFirst().orElse("");
+      renderedPatch
+          .append(header)
+          .append('\n')
+          .append(GITLINK_LINE_PREFIX)
+          .append(filename)
+          .append(": ")
+          .append(firstGroup(OLD_GITLINK_COMMIT_PATTERN, diffSection))
+          .append(" -> ")
+          .append(firstGroup(NEW_GITLINK_COMMIT_PATTERN, diffSection))
+          .append('\n');
+    }
+    return renderedPatch.toString();
+  }
+
+  private static boolean isGitlinkSection(String diffSection) {
+    return GITLINK_MODE_PATTERN.matcher(diffSection).find()
+        || diffSection.lines().skip(1).findFirst().orElse("").startsWith(GITLINK_LINE_PREFIX);
+  }
+
+  private static String firstGroup(Pattern pattern, String text) {
+    Matcher matcher = pattern.matcher(text);
+    return matcher.find() ? matcher.group(1) : NO_GITLINK_COMMIT;
+  }
+
+  private static List<Integer> diffSectionStarts(String formattedPatch) {
+    Matcher diffStartMatcher = DIFF_START_PATTERN.matcher(formattedPatch);
+    List<Integer> diffSectionStarts = new ArrayList<>();
+    while (diffStartMatcher.find()) {
+      diffSectionStarts.add(diffStartMatcher.start());
+    }
+    return diffSectionStarts;
+  }
+
+  private static List<String> diffSections(String formattedPatch, List<Integer> starts) {
+    List<String> diffSections = new ArrayList<>();
+    for (int i = 0; i < starts.size(); i++) {
+      int end = i + 1 < starts.size() ? starts.get(i + 1) : formattedPatch.length();
+      diffSections.add(formattedPatch.substring(starts.get(i), end));
+    }
+    return diffSections;
   }
 
   private static String extractFilenameFromPatchSection(String diffSection) {

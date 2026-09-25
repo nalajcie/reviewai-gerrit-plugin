@@ -16,6 +16,7 @@
 
 package com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data;
 
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.commands.ClientCommandBase;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.commands.ClientCommandBase.CommandSet;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.api.gerrit.GerritConditionLabel;
@@ -66,6 +67,11 @@ public class ChangeSetData {
   private transient Boolean moderatorFeaturesAllowed = false;
   private transient boolean reviewFeedbackClassified;
   private transient AiRequestCancellation aiRequestCancellation = new AiRequestCancellation();
+  // Review group members of a multi-project review, keyed by the filename prefix that identifies
+  // them in the merged patch and in on-demand code context tool paths.
+  private transient Map<String, GerritChange> reviewGroupChangesByPrefix = Map.of();
+  // Review group summary prepended to the patch when only the triggering change is reviewed.
+  private transient String reviewGroupHeader;
 
   // Command variables
   private Boolean forcedReview = false;
@@ -167,6 +173,8 @@ public class ChangeSetData {
     copy.setModeratorFeaturesAllowed(moderatorFeaturesAllowed);
     copy.setReviewFeedbackClassified(reviewFeedbackClassified);
     copy.setAiRequestCancellation(aiRequestCancellation);
+    copy.setReviewGroupChangesByPrefix(reviewGroupChangesByPrefix);
+    copy.setReviewGroupHeader(reviewGroupHeader);
     copy.setForcedReview(forcedReview);
     copy.setForcedTopicReview(forcedTopicReview);
     copy.setReplyFilterEnabled(replyFilterEnabled);

@@ -99,6 +99,7 @@ public class Configuration extends ConfigCore {
   private static final int DEFAULT_AI_MAX_MEMORY_TOKENS = 16384;
   private static final int DEFAULT_AI_MAX_TOOL_RESPONSE_ROUNDS = 3;
   private static final int DEFAULT_TOPIC_PATCH_SET_WAIT_MS = 3000;
+  private static final String DEFAULT_TOPIC_REVIEW_SCOPE = "PROJECT_BRANCH";
   private static final boolean DEFAULT_AI_PROVIDER_ZDR = false;
   private static final int DEFAULT_OLLAMA_CONTEXT_WINDOW = 16384;
   private static final int DEFAULT_OLLAMA_RESPONSE_LENGTH = -1;
@@ -167,6 +168,7 @@ public class Configuration extends ConfigCore {
   private static final String KEY_AI_MAX_CONCURRENT_REQUESTS = "aiMaxConcurrentRequests";
   private static final String KEY_AI_MAX_TOOL_RESPONSE_ROUNDS = "aiMaxToolResponseRounds";
   private static final String KEY_TOPIC_PATCH_SET_WAIT_MS = "topicPatchSetWaitMs";
+  private static final String KEY_TOPIC_REVIEW_SCOPE = "topicReviewScope";
   private static final String KEY_AI_PROVIDER_ZDR = "aiProviderZdr";
   private static final String KEY_OLLAMA_CONTEXT_WINDOW = "ollamaContextWindow";
   private static final String KEY_OLLAMA_DOMAIN = "ollamaDomain";
@@ -190,6 +192,11 @@ public class Configuration extends ConfigCore {
     SINGLE_AGENT,
     SCOPED_AGENTS,
     SPECIALIZED_AGENTS
+  }
+
+  public enum TopicReviewScope {
+    PROJECT_BRANCH,
+    SUBMITTED_TOGETHER
   }
 
   public String getAiToken() {
@@ -419,6 +426,10 @@ public class Configuration extends ConfigCore {
     return Math.max(0, getInt(KEY_TOPIC_PATCH_SET_WAIT_MS, DEFAULT_TOPIC_PATCH_SET_WAIT_MS));
   }
 
+  public TopicReviewScope getTopicReviewScope() {
+    return getEnum(KEY_TOPIC_REVIEW_SCOPE, DEFAULT_TOPIC_REVIEW_SCOPE, TopicReviewScope.class);
+  }
+
   public boolean getAiProviderZdr() {
     return getBoolean(KEY_AI_PROVIDER_ZDR, DEFAULT_AI_PROVIDER_ZDR);
   }
@@ -484,6 +495,9 @@ public class Configuration extends ConfigCore {
     }
     if (KEY_AGENT_SPECIALIZATION_LEVEL.equals(key)) {
       return Optional.of(Arrays.stream(AgentSpecializationLevel.values()).map(Enum::name).toList());
+    }
+    if (KEY_TOPIC_REVIEW_SCOPE.equals(key)) {
+      return Optional.of(Arrays.stream(TopicReviewScope.values()).map(Enum::name).toList());
     }
     return Optional.empty();
   }

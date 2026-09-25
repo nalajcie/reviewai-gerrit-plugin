@@ -26,7 +26,11 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerr
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.GitRepoFiles;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import java.io.FileNotFoundException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -48,31 +52,49 @@ public class OnDemandCodeContextTools extends ClientBase {
   private final GerritChange change;
   private final GitRepoFiles gitRepoFiles;
   private final TreeOutputCompressor treeOutputCompressor;
-  private Set<String> changedFiles;
-  private boolean changedFilesResolved;
+  private final Map<String, GerritChange> reviewGroupChangesByPrefix;
+  private final Map<GerritChange, Optional<Set<String>>> changedFilesByChange = new HashMap<>();
 
   public OnDemandCodeContextTools(
       Configuration config, GerritChange change, GitRepoFiles gitRepoFiles) {
+    this(config, change, gitRepoFiles, Map.of());
+  }
+
+  /**
+   * Creates the tools for a review whose patch merges several review group members. Paths that
+   * start with a member prefix, such as {@code reviewai-topic-change-2/core-libs/}, resolve to that
+   * member's repository at its current patch set; other paths resolve to {@code change}.
+   */
+  public OnDemandCodeContextTools(
+      Configuration config,
+      GerritChange change,
+      GitRepoFiles gitRepoFiles,
+      Map<String, GerritChange> reviewGroupChangesByPrefix) {
     super(config);
     this.change = change;
     this.gitRepoFiles = gitRepoFiles;
     this.treeOutputCompressor = new TreeOutputCompressor();
+    this.reviewGroupChangesByPrefix =
+        reviewGroupChangesByPrefix == null ? Map.of() : reviewGroupChangesByPrefix;
   }
 
-  private Set<String> changedFiles() {
-    if (!changedFilesResolved) {
-      changedFilesResolved = true;
-      try {
-        changedFiles = gitRepoFiles.getPatchSetChangedFiles(change);
-      } catch (Exception e) {
-        log.warn(
-            "Could not resolve changed files for change {}; on-demand tools will not be scoped to the change",
-            getChangeId(),
-            e);
-        changedFiles = null;
-      }
-    }
-    return changedFiles;
+  private Set<String> changedFiles(GerritChange targetChange) {
+    return changedFilesByChange
+        .computeIfAbsent(
+            targetChange,
+            ignored -> {
+              try {
+                return Optional.ofNullable(gitRepoFiles.getPatchSetChangedFiles(targetChange));
+              } catch (Exception e) {
+                log.warn(
+                    "Could not resolve changed files for change {}; on-demand tools will not be"
+                        + " scoped to the change",
+                    targetChange.getFullChangeId(),
+                    e);
+                return Optional.empty();
+              }
+            })
+        .orElse(null);
   }
 
   public String execute(String toolName, String arguments) {
@@ -112,27 +134,51 @@ public class OnDemandCodeContextTools extends ClientBase {
   }
 
   private String tree(String subdir) {
-    List<String> paths = gitRepoFiles.getPatchSetFileTree(config, change, subdir);
-    if (paths == null || paths.isEmpty()) {
+    if ((subdir == null || subdir.isBlank()) && !reviewGroupChangesByPrefix.isEmpty()) {
+      List<String> paths = new ArrayList<>();
+      paths.addAll(treePaths(resolve(subdir)));
+      for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
+        if (member.getValue() != change) {
+          paths.addAll(treePaths(new ResolvedPath(member.getValue(), member.getKey(), "")));
+        }
+      }
+      return paths.isEmpty() ? CONTEXT_NOT_PROVIDED : treeOutputCompressor.format(paths, subdir);
+    }
+    ResolvedPath resolvedPath = resolve(subdir);
+    List<String> paths = treePaths(resolvedPath);
+    if (paths.isEmpty()) {
       return CONTEXT_NOT_PROVIDED;
     }
-    Set<String> changed = changedFiles();
+    return treeOutputCompressor.format(
+        paths,
+        resolvedPath.prefix().isEmpty() ? subdir : resolvedPath.prefix() + resolvedPath.path());
+  }
+
+  private List<String> treePaths(ResolvedPath resolvedPath) {
+    List<String> paths =
+        gitRepoFiles.getPatchSetFileTree(config, resolvedPath.change(), resolvedPath.path());
+    if (paths == null || paths.isEmpty()) {
+      return List.of();
+    }
+    Set<String> changed = changedFiles(resolvedPath.change());
     if (changed != null) {
       paths = paths.stream().filter(changed::contains).toList();
-      if (paths.isEmpty()) {
-        return CONTEXT_NOT_PROVIDED;
-      }
     }
-    return treeOutputCompressor.format(paths, subdir);
+    return paths.stream().map(path -> resolvedPath.prefix() + path).toList();
   }
 
   private String getContent(String filePath) throws FileNotFoundException {
     if (filePath == null || filePath.isBlank() || isCommitMessagePath(filePath)) {
       return CONTEXT_NOT_PROVIDED;
     }
-    String content = gitRepoFiles.getPatchSetFileContent(change, filePath);
-    Set<String> changed = changedFiles();
-    if (changed != null && !changed.contains(filePath)) {
+    ResolvedPath resolvedPath = resolve(filePath);
+    if (resolvedPath.path().isBlank()) {
+      return CONTEXT_NOT_PROVIDED;
+    }
+    String content =
+        gitRepoFiles.getPatchSetFileContent(resolvedPath.change(), resolvedPath.path());
+    Set<String> changed = changedFiles(resolvedPath.change());
+    if (changed != null && !changed.contains(resolvedPath.path())) {
       return PREEXISTING_CONTEXT_MARKER + content;
     }
     return content;
@@ -146,13 +192,54 @@ public class OnDemandCodeContextTools extends ClientBase {
     if (string == null || string.isEmpty()) {
       return CONTEXT_NOT_PROVIDED;
     }
-    Set<String> changed = changedFiles();
-    List<String> matches = gitRepoFiles.grepPatchSet(config, change, string, changed);
-    if (matches == null || matches.isEmpty()) {
+    List<String> matches = new ArrayList<>(grep(resolve(null), string));
+    for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
+      if (member.getValue() != change) {
+        matches.addAll(grep(new ResolvedPath(member.getValue(), member.getKey(), ""), string));
+      }
+    }
+    if (matches.isEmpty()) {
       return CONTEXT_NOT_PROVIDED;
     }
     return String.join("\n", matches);
   }
+
+  private List<String> grep(ResolvedPath resolvedPath, String string) {
+    Set<String> changed = changedFiles(resolvedPath.change());
+    List<String> matches =
+        gitRepoFiles.grepPatchSet(config, resolvedPath.change(), string, changed);
+    if (matches == null) {
+      return List.of();
+    }
+    return matches.stream().map(match -> resolvedPath.prefix() + match).toList();
+  }
+
+  /**
+   * Resolves a tool path to the review group member it refers to. Unprefixed paths refer to the
+   * change under review; in a merged review group they are reported back with its prefix.
+   */
+  private ResolvedPath resolve(String path) {
+    String normalizedPath = path == null ? "" : path.replaceAll("^/+", "");
+    String ownPrefix = "";
+    for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
+      String prefix = member.getKey();
+      if (normalizedPath.startsWith(prefix)
+          || normalizedPath.equals(prefix.substring(0, prefix.length() - 1))) {
+        return new ResolvedPath(
+            member.getValue(),
+            prefix,
+            normalizedPath.length() > prefix.length()
+                ? normalizedPath.substring(prefix.length())
+                : "");
+      }
+      if (member.getValue() == change) {
+        ownPrefix = prefix;
+      }
+    }
+    return new ResolvedPath(change, ownPrefix, path);
+  }
+
+  private record ResolvedPath(GerritChange change, String prefix, String path) {}
 
   private static JsonObject parseArguments(String arguments) {
     if (arguments == null || arguments.isBlank()) {

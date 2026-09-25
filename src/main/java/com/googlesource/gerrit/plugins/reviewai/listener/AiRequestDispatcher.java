@@ -25,6 +25,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.Gerr
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.GerritChangeRef;
 import com.googlesource.gerrit.plugins.reviewai.config.ConfigCreator;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.config.Configuration.TopicReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.data.AiRequest;
 import com.googlesource.gerrit.plugins.reviewai.data.AiRequestStore;
 import com.googlesource.gerrit.plugins.reviewai.data.AiRequestSubmission;
@@ -160,10 +161,11 @@ final class AiRequestDispatcher {
   private ProcessingOutcome processPersistedRequest(AiRequest request) throws Exception {
     AiRequestDescriptor descriptor = AiRequestDescriptor.fromJson(request.payloadJson());
     PatchSetEvent event = descriptor.toEvent();
-    if (event instanceof PatchSetCreatedEvent patchSetCreatedEvent) {
+    Configuration config = createConfig(descriptor.changeLocator());
+    if (event instanceof PatchSetCreatedEvent patchSetCreatedEvent
+        && config.getTopicReviewScope() != TopicReviewScope.SUBMITTED_TOGETHER) {
       topicPatchSetReviewCoordinator.recordEvent(patchSetCreatedEvent);
     }
-    Configuration config = createConfig(descriptor.changeLocator());
     EventHandlerTask task = contextFactory.create(config, event).task();
     return processingOutcome(task.execute(descriptor.sourceEventId()));
   }

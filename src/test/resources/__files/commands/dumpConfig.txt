@@ -74,4 +74,5 @@ storePassword:
 storeUrl:
 storeUsername:
 topicPatchSetWaitMs: 3000
+topicReviewScope: PROJECT_BRANCH
 ```

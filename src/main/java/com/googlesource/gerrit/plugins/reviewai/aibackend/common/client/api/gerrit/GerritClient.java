@@ -84,6 +84,10 @@ public class GerritClient {
     return gerritClientFacade.getTopicChanges(change);
   }
 
+  public List<GerritChange> getSubmittedTogetherChanges(GerritChange change) {
+    return gerritClientFacade.getSubmittedTogetherChanges(change);
+  }
+
   public Map<String, GerritConditionLabel> getConditionLabels(
       GerritChange change, String expression) {
     return gerritClientFacade.getConditionLabels(change, expression);

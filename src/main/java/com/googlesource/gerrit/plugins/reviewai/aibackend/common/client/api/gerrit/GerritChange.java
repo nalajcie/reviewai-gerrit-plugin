@@ -47,6 +47,7 @@ public class GerritChange {
   private Change.Key changeKey;
   private String fullChangeId;
   @Setter private String topic;
+  @Setter private String subject;
   @Setter private Integer changeNumber;
   @Setter private Integer patchSetNumber;
   @Setter private String patchSetRevision;
@@ -137,6 +138,19 @@ public class GerritChange {
       return Optional.ofNullable(patchSetEvent.change.get())
           .map(change -> change.topic)
           .filter(topic -> !topic.isBlank());
+    } catch (NullPointerException e) {
+      return Optional.empty();
+    }
+  }
+
+  public Optional<String> getSubject() {
+    if (subject != null && !subject.isBlank()) {
+      return Optional.of(subject);
+    }
+    try {
+      return Optional.ofNullable(patchSetEvent.change.get())
+          .map(change -> change.subject)
+          .filter(subject -> !subject.isBlank());
     } catch (NullPointerException e) {
       return Optional.empty();
     }

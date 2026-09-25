@@ -43,6 +43,7 @@ import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.clie
 import com.googlesource.gerrit.plugins.reviewai.listener.AiReviewApplicabilityChecker;
 import com.googlesource.gerrit.plugins.reviewai.localization.Localizer;
 import com.googlesource.gerrit.plugins.reviewai.localization.SystemMessageFormatter;
+import com.googlesource.gerrit.plugins.reviewai.review.topic.ReviewGroupMember;
 import com.googlesource.gerrit.plugins.reviewai.review.topic.TopicReviewReplyMapper;
 import java.util.*;
 import javax.annotation.Nullable;
@@ -146,7 +147,7 @@ public class PatchSetReviewer {
 
     AiResponseContent reviewReply = null;
     try {
-      reviewReply = getReviewReply(change, patchSet);
+      reviewReply = getReviewReply(change, withReviewGroupHeader(patchSet));
       log.debug("AI final response: {}", reviewReply);
     } catch (AiRequestSupersededException e) {
       reviewFeedbackLifecycle.release(change, feedbackSession, e);
@@ -209,6 +210,19 @@ public class PatchSetReviewer {
   public void reviewTopic(List<GerritChange> changes, boolean includeAiFailureDetails)
       throws Exception {
     topicPatchSetReviewer.review(changes, includeAiFailureDetails);
+  }
+
+  public void reviewGroup(List<ReviewGroupMember> members, boolean includeAiFailureDetails)
+      throws Exception {
+    topicPatchSetReviewer.reviewGroup(members, includeAiFailureDetails);
+  }
+
+  private String withReviewGroupHeader(String patchSet) {
+    String reviewGroupHeader = changeSetData.getReviewGroupHeader();
+    if (reviewGroupHeader == null || reviewGroupHeader.isBlank()) {
+      return patchSet;
+    }
+    return reviewGroupHeader + "\n\n" + patchSet;
   }
 
   boolean shouldSkipAiReviewForEmptyPatchSet(GerritChange change) {

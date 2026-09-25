@@ -83,6 +83,7 @@ public class EventHandlerTask implements Runnable {
   private final ReviewAgentEventRequestStatusUpdater reviewAgentRequestStatusUpdater;
   private final TopicPatchSetReviewCoordinator topicPatchSetReviewCoordinator;
   private final AiReviewApplicabilityChecker aiReviewApplicabilityChecker;
+  private final ReviewGroupResolver reviewGroupResolver;
   private final ReviewAiMetrics metrics;
   private final ReviewFeedbackPublisher reviewFeedbackPublisher;
   private final Localizer localizer;
@@ -109,6 +110,7 @@ public class EventHandlerTask implements Runnable {
       ReviewAgentEventRequestStatusUpdater reviewAgentRequestStatusUpdater,
       TopicPatchSetReviewCoordinator topicPatchSetReviewCoordinator,
       AiReviewApplicabilityChecker aiReviewApplicabilityChecker,
+      ReviewGroupResolver reviewGroupResolver,
       ReviewAiMetrics metrics,
       ReviewFeedbackPublisher reviewFeedbackPublisher,
       Localizer localizer) {
@@ -124,6 +126,7 @@ public class EventHandlerTask implements Runnable {
     this.reviewAgentRequestStatusUpdater = reviewAgentRequestStatusUpdater;
     this.topicPatchSetReviewCoordinator = topicPatchSetReviewCoordinator;
     this.aiReviewApplicabilityChecker = aiReviewApplicabilityChecker;
+    this.reviewGroupResolver = reviewGroupResolver;
     this.metrics = metrics;
     this.reviewFeedbackPublisher = reviewFeedbackPublisher;
     this.localizer = localizer;
@@ -253,6 +256,7 @@ public class EventHandlerTask implements Runnable {
               gerritClient,
               topicPatchSetReviewCoordinator,
               aiReviewApplicabilityChecker,
+              reviewGroupResolver,
               administratorUser);
       case COMMENT_ADDED ->
           new EventHandlerTypeCommentAdded(

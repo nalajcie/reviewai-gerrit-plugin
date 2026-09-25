@@ -24,6 +24,9 @@ import com.google.gerrit.entities.BranchNameKey;
 import com.google.gerrit.entities.Change;
 import com.google.gerrit.entities.LabelId;
 import com.google.gerrit.entities.Project;
+import com.google.gerrit.extensions.api.changes.SubmittedTogetherInfo;
+import com.google.gerrit.extensions.api.changes.SubmittedTogetherOption;
+import com.google.gerrit.extensions.client.ChangeStatus;
 import com.google.gerrit.extensions.client.ListChangesOption;
 import com.google.gerrit.extensions.common.AccountInfo;
 import com.google.gerrit.extensions.common.ApprovalInfo;
@@ -40,6 +43,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.Chan
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -158,6 +162,38 @@ public class GerritClientDetail {
     }
   }
 
+  /**
+   * Returns the open changes that Gerrit would submit together with the given change, across
+   * projects, as seen by the AI user. The result includes the change itself when Gerrit reports it.
+   */
+  public List<GerritChange> getSubmittedTogetherChanges(GerritChange change) {
+    try (ManualRequestContext ignored = config.openRequestContext()) {
+      SubmittedTogetherInfo info =
+          change
+              .getChangeApi(config)
+              .submittedTogether(
+                  EnumSet.of(ListChangesOption.CURRENT_REVISION),
+                  EnumSet.of(SubmittedTogetherOption.NON_VISIBLE_CHANGES));
+      if (info == null || info.changes == null) {
+        return emptyList();
+      }
+      if (info.nonVisibleChanges > 0) {
+        log.warn(
+            "{} changes submitted together with {} are not visible to the AI user and are ignored",
+            info.nonVisibleChanges,
+            change.getFullChangeId());
+      }
+      return info.changes.stream()
+          .filter(changeInfo -> changeInfo.status == null || changeInfo.status == ChangeStatus.NEW)
+          .map(GerritClientDetail::toGerritChange)
+          .toList();
+    } catch (Exception e) {
+      log.error(
+          "Error querying changes submitted together with change {}", change.getFullChangeId(), e);
+      return emptyList();
+    }
+  }
+
   private GerritPatchSetDetail loadPatchSetDetail(GerritChange change) {
     String changeKey = change.getFullChangeId();
     if (gerritPatchSetDetails.containsKey(changeKey)) {
@@ -220,6 +256,7 @@ public class GerritClientDetail {
     change.setPatchSetNumber(changeInfo.currentRevisionNumber);
     change.setPatchSetRevision(changeInfo.currentRevision);
     change.setTopic(changeInfo.topic);
+    change.setSubject(changeInfo.subject);
     return change;
   }
 

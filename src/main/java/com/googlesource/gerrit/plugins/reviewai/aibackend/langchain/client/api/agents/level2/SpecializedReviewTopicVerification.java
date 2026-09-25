@@ -26,7 +26,7 @@ import java.util.regex.Pattern;
 
 final class SpecializedReviewTopicVerification {
   private static final Pattern TOPIC_PATCH_ORIGIN_PATTERN =
-      Pattern.compile("(?m)^ReviewAI origin: (reviewai-topic-change-\\d+/)\\R");
+      Pattern.compile("(?m)^ReviewAI origin: (reviewai-topic-change-\\d+/[^\\r\\n]*)\\R");
 
   private SpecializedReviewTopicVerification() {}
 

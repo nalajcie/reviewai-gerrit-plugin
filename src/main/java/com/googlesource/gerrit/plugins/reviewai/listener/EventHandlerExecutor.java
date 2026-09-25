@@ -26,6 +26,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerr
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.commands.ClientCommandExtension;
 import com.googlesource.gerrit.plugins.reviewai.config.ConfigCreator;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.config.Configuration.TopicReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.listener.GerritEventHandlerContextFactory.Context;
 import lombok.extern.slf4j.Slf4j;
 
@@ -71,7 +72,9 @@ public class EventHandlerExecutor {
               .orElse(0L);
       dispatcher.requestActiveReviewSupersession(
           context, config, patchSetCreatedEvent, patchSetNumber);
-      topicPatchSetReviewCoordinator.recordEvent(patchSetCreatedEvent);
+      if (config.getTopicReviewScope() != TopicReviewScope.SUBMITTED_TOGETHER) {
+        topicPatchSetReviewCoordinator.recordEvent(patchSetCreatedEvent);
+      }
     }
     dispatcher.submit(context, config, (PatchSetEvent) event);
     log.debug("Task submitted to executor for event: {}", event);

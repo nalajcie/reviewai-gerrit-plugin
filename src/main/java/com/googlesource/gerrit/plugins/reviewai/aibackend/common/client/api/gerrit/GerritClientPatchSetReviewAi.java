@@ -28,6 +28,7 @@ import com.google.inject.Inject;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.config.Configuration.TopicReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.api.gerrit.IGerritClientPatchSet;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -301,40 +302,39 @@ public class GerritClientPatchSetReviewAi extends GerritClientPatchSet
     }
     if (config.getAiReviewCommitMessages()) {
       String patchWithCommitMessage =
-          filterPatchByEnabledFileExtensions(
-              filterPatchWithCommitMessage(formattedPatch),
-              config.getEnabledFileExtensions(),
-              config.getDisabledFileExtensions());
+          filterPatchByFileExtensions(filterPatchWithCommitMessage(formattedPatch));
       log.debug("Patch filtered to include commit messages: {}", patchWithCommitMessage);
       return patchWithCommitMessage;
     } else {
       String patchWithoutCommitMessage =
-          filterPatchByEnabledFileExtensions(
-              filterPatchWithoutCommitMessage(change, formattedPatch),
-              config.getEnabledFileExtensions(),
-              config.getDisabledFileExtensions());
+          filterPatchByFileExtensions(filterPatchWithoutCommitMessage(change, formattedPatch));
       log.debug("Patch filtered to exclude commit messages: {}", patchWithoutCommitMessage);
       return patchWithoutCommitMessage;
     }
+  }
+
+  private String filterPatchByFileExtensions(String formattedPatch) {
+    // Multi-project review groups keep gitlink updates, rendered as one readable line, because
+    // they link the superproject change to the submodule changes of the group.
+    boolean keepGitlinks = config.getTopicReviewScope() == TopicReviewScope.SUBMITTED_TOGETHER;
+    return filterPatchByEnabledFileExtensions(
+        keepGitlinks ? renderGitlinkDiffs(formattedPatch) : formattedPatch,
+        config.getEnabledFileExtensions(),
+        config.getDisabledFileExtensions(),
+        keepGitlinks);
   }
 
   private String filterPatchByReviewScope(String formattedPatch) {
     return switch (changeSetData.getReviewScope()) {
       case FULL -> {
         String fullPatch =
-            filterPatchByEnabledFileExtensions(
-                filterPatchWithCommitMessage(formattedPatch),
-                config.getEnabledFileExtensions(),
-                config.getDisabledFileExtensions());
+            filterPatchByFileExtensions(filterPatchWithCommitMessage(formattedPatch));
         log.debug("Patch filtered by command scope to include the full Change Set: {}", fullPatch);
         yield fullPatch;
       }
       case PATCHSET -> {
         String patchWithoutCommitMessage =
-            filterPatchByEnabledFileExtensions(
-                filterPatchWithoutCommitMessage(change, formattedPatch),
-                config.getEnabledFileExtensions(),
-                config.getDisabledFileExtensions());
+            filterPatchByFileExtensions(filterPatchWithoutCommitMessage(change, formattedPatch));
         log.debug(
             "Patch filtered by command scope to exclude commit messages: {}",
             patchWithoutCommitMessage);
@@ -342,10 +342,7 @@ public class GerritClientPatchSetReviewAi extends GerritClientPatchSet
       }
       case COMMIT_MESSAGE -> {
         String patchWithCommitMessage =
-            filterPatchByEnabledFileExtensions(
-                filterPatchWithCommitMessage(formattedPatch),
-                config.getEnabledFileExtensions(),
-                config.getDisabledFileExtensions());
+            filterPatchByFileExtensions(filterPatchWithCommitMessage(formattedPatch));
         log.debug(
             "Patch filtered by command scope to include commit message and patch context: {}",
             patchWithCommitMessage);

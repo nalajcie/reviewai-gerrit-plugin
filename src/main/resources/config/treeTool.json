@@ -1,7 +1,7 @@
 {
   "type": "function",
   "name": "tree",
-  "description": "Return the repository file tree starting from the provided subdirectory, or from the git project root when no subdirectory is provided. Large results are shortened by replacing expanded directories with path/... entries; request that path as subdir to inspect it.",
+  "description": "Return the repository file tree starting from the provided subdirectory, or from the git project root when no subdirectory is provided. Large results are shortened by replacing expanded directories with path/... entries; request that path as subdir to inspect it. When the patch merges several changes, a path may start with the ReviewAI origin prefix of a change (`reviewai-topic-change-<N>/<project>/`) to address that change's repository at its current patch set; paths without a prefix address the primary change.",
   "strict": false,
   "parameters": {
     "type": "object",

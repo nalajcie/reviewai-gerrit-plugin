@@ -103,6 +103,10 @@ public class GerritClientFacade {
     return gerritClientDetail.getTopicChanges(change);
   }
 
+  public List<GerritChange> getSubmittedTogetherChanges(GerritChange change) {
+    return gerritClientDetail.getSubmittedTogetherChanges(change);
+  }
+
   public Map<String, GerritConditionLabel> getConditionLabels(
       GerritChange change, String expression) {
     return gerritClientDetail.getConditionLabels(change, expression);

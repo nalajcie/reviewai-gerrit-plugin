@@ -92,7 +92,7 @@ class LangChainExecutor {
           maxToolResponseRounds,
           requests.size());
       for (ToolExecutionRequest request : requests) {
-        String output = executeToolRequest(request, change);
+        String output = executeToolRequest(request, change, changeSetData);
         log.debug(
             "Adding LangChain tool result for request id={}, name={}, outputLength={}",
             request.id(),
@@ -177,7 +177,8 @@ class LangChainExecutor {
     return requireInitialToolUse ? ToolChoice.REQUIRED : ToolChoice.AUTO;
   }
 
-  private String executeToolRequest(ToolExecutionRequest request, GerritChange change) {
+  private String executeToolRequest(
+      ToolExecutionRequest request, GerritChange change, ChangeSetData changeSetData) {
     if (request == null || onDemandTools == null || onDemandTools.isEmpty()) {
       log.debug(
           "Skipping LangChain tool request execution because request or configured tools are missing");
@@ -197,7 +198,8 @@ class LangChainExecutor {
         toolName,
         arguments);
     OnDemandCodeContextTools codeContextTools =
-        new OnDemandCodeContextTools(config, change, gitRepoFiles);
+        new OnDemandCodeContextTools(
+            config, change, gitRepoFiles, changeSetData.getReviewGroupChangesByPrefix());
     String output = codeContextTools.execute(toolName, arguments);
     log.debug(
         "Executed LangChain request id={}, name={}, outputLength={}",

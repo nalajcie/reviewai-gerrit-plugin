@@ -1,7 +1,7 @@
 {
   "type": "function",
   "name": "grep",
-  "description": "Search the git project for a literal string and return matching file paths, line numbers, and lines.",
+  "description": "Search the git project for a literal string and return matching file paths, line numbers, and lines. When the patch merges several changes, every change is searched and each match is reported with the ReviewAI origin prefix of its change (`reviewai-topic-change-<N>/<project>/`).",
   "strict": false,
   "parameters": {
     "type": "object",

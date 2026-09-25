@@ -25,10 +25,15 @@ import com.googlesource.gerrit.plugins.reviewai.data.ChangeSetDataHandler;
 import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.AiRequestSupersededException;
 import com.googlesource.gerrit.plugins.reviewai.localization.Localizer;
 import com.googlesource.gerrit.plugins.reviewai.localization.SystemMessageFormatter;
+import com.googlesource.gerrit.plugins.reviewai.review.topic.ReviewGroupMember;
 import com.googlesource.gerrit.plugins.reviewai.review.topic.TopicPatchSetReviewMerger;
 import com.googlesource.gerrit.plugins.reviewai.review.topic.TopicReviewPatchSet;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -95,13 +100,120 @@ class TopicPatchSetReviewer {
     }
 
     GerritChange primaryChange = patchSets.getFirst().change();
+    reviewAndPublish(
+        primaryChange,
+        topicPatchSetReviewMerger.buildMergedPatchSet(patchSets),
+        patchSets,
+        includeAiFailureDetails);
+  }
+
+  /**
+   * Reviews a multi-project review group as one merged patch. The first member is the change that
+   * triggered the review. Members that are not reviewable are included as read-only context and
+   * receive no comments or votes. When the merged patch exceeds {@code maxReviewLines}, only the
+   * triggering change is reviewed, with the member list prepended to its patch.
+   */
+  void reviewGroup(List<ReviewGroupMember> members, boolean includeAiFailureDetails)
+      throws Exception {
+    log.debug("Starting review group process for {} changes", members.size());
+    List<TopicReviewPatchSet> patchSets = new ArrayList<>();
+    Set<GerritChange> reviewableChanges = new HashSet<>();
+    changeSetData.setReviewRepeatedCommentsMessage(null);
+    for (ReviewGroupMember member : members) {
+      GerritChange memberChange = member.change();
+      gerritClient.requireCurrentRevision(memberChange);
+      String patchSet = gerritClient.getPatchSet(memberChange);
+      if (!patchSetReviewer.shouldSkipAiReviewForEmptyPatchSet(memberChange)) {
+        patchSets.add(
+            topicPatchSetReviewMerger.reviewGroupPatchSet(
+                memberChange, patchSets.size(), patchSet));
+      }
+      if (member.reviewable()) {
+        reviewableChanges.add(memberChange);
+      }
+    }
+    List<TopicReviewPatchSet> publishedPatchSets =
+        patchSets.stream()
+            .filter(patchSet -> reviewableChanges.contains(patchSet.change()))
+            .toList();
+    if (publishedPatchSets.isEmpty()) {
+      log.debug("No reviewable review group patch sets remain after patch filtering.");
+      return;
+    }
+    GerritChange triggeringChange = members.getFirst().change();
+    GerritChange singleReviewedChange =
+        publishedPatchSets.stream().anyMatch(patchSet -> patchSet.change() == triggeringChange)
+            ? triggeringChange
+            : publishedPatchSets.getFirst().change();
+    if (patchSets.size() < 2) {
+      reviewSingleGroupMember(members, patchSets, singleReviewedChange, includeAiFailureDetails);
+      return;
+    }
+    String mergedPatchSet =
+        topicPatchSetReviewMerger.buildMergedReviewGroupPatchSet(members, patchSets);
+    int mergedPatchSetLines = mergedPatchSet.split("\n").length;
+    if (mergedPatchSetLines > config.getMaxReviewLines()) {
+      log.info(
+          "Review group of change {} has {} patch lines, more than maxReviewLines ({}); reviewing"
+              + " only change {}",
+          triggeringChange.getFullChangeId(),
+          mergedPatchSetLines,
+          config.getMaxReviewLines(),
+          singleReviewedChange.getFullChangeId());
+      reviewSingleGroupMember(members, patchSets, singleReviewedChange, includeAiFailureDetails);
+      return;
+    }
+
+    Map<String, GerritChange> changesByPrefix = new LinkedHashMap<>();
+    patchSets.forEach(patchSet -> changesByPrefix.put(patchSet.prefix(), patchSet.change()));
+    changeSetData.setReviewGroupChangesByPrefix(changesByPrefix);
+    try {
+      reviewAndPublish(
+          publishedPatchSets.getFirst().change(),
+          mergedPatchSet,
+          publishedPatchSets,
+          includeAiFailureDetails);
+    } finally {
+      changeSetData.setReviewGroupChangesByPrefix(Map.of());
+    }
+  }
+
+  private void reviewSingleGroupMember(
+      List<ReviewGroupMember> members,
+      List<TopicReviewPatchSet> patchSets,
+      GerritChange reviewedChange,
+      boolean includeAiFailureDetails)
+      throws Exception {
+    Map<String, GerritChange> otherChangesByPrefix = new LinkedHashMap<>();
+    patchSets.stream()
+        .filter(patchSet -> patchSet.change() != reviewedChange)
+        .forEach(patchSet -> otherChangesByPrefix.put(patchSet.prefix(), patchSet.change()));
+    changeSetData.setReviewGroupChangesByPrefix(otherChangesByPrefix);
+    changeSetData.setReviewGroupHeader(
+        topicPatchSetReviewMerger.buildReviewGroupHeader(members, patchSets)
+            + "\n\nOnly the patch of change "
+            + reviewedChange.getChangeNumber().map(String::valueOf).orElse("?")
+            + " is included below; the other members are listed for context. Use unprefixed"
+            + " filenames in inline replies.");
+    try {
+      patchSetReviewer.review(reviewedChange, includeAiFailureDetails);
+    } finally {
+      changeSetData.setReviewGroupChangesByPrefix(Map.of());
+      changeSetData.setReviewGroupHeader(null);
+    }
+  }
+
+  private void reviewAndPublish(
+      GerritChange primaryChange,
+      String mergedPatchSet,
+      List<TopicReviewPatchSet> publishedPatchSets,
+      boolean includeAiFailureDetails)
+      throws Exception {
     gerritClient.getPatchSet(primaryChange);
     ChangeSetDataHandler.update(config, primaryChange, gerritClient, changeSetData, localizer);
     AiResponseContent reviewReply = null;
     try {
-      reviewReply =
-          patchSetReviewer.getReviewReply(
-              primaryChange, topicPatchSetReviewMerger.buildMergedPatchSet(patchSets));
+      reviewReply = patchSetReviewer.getReviewReply(primaryChange, mergedPatchSet);
       log.debug("AI final response for topic review: {}", reviewReply);
     } catch (AiRequestSupersededException e) {
       throw e;
@@ -130,10 +242,10 @@ class TopicPatchSetReviewer {
     }
 
     List<Double> topicReviewScores = patchSetReviewer.getReviewScores(reviewReply);
-    for (TopicReviewPatchSet patchSet : patchSets) {
+    for (TopicReviewPatchSet patchSet : publishedPatchSets) {
       gerritClient.requireCurrentRevision(patchSet.change());
     }
-    for (TopicReviewPatchSet patchSet : patchSets) {
+    for (TopicReviewPatchSet patchSet : publishedPatchSets) {
       patchSetReviewer.publishTopicReviewPart(
           reviewReply, patchSet.change(), patchSet.prefix(), topicReviewScores);
     }

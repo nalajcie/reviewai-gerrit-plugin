@@ -21,6 +21,9 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.gerrit.entities.BranchNameKey;
+import com.google.gerrit.entities.Change;
+import com.google.gerrit.entities.Project;
 import com.googlesource.gerrit.plugins.reviewai.TestBase;
 import com.googlesource.gerrit.plugins.reviewai.TestResourceLoader;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritChange;
@@ -28,7 +31,9 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.Before;
 import org.junit.Test;
@@ -171,8 +176,82 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   }
 
   @Test
+  public void prefixedPathsResolveToReviewGroupMemberRepository() throws Exception {
+    GerritChange coreLibs = reviewGroupMember("core-libs", 11);
+    OnDemandCodeContextTools groupTools = reviewGroupTools(coreLibs);
+    when(gitRepoFiles.getPatchSetFileContent(coreLibs, "src/span.h")).thenReturn("span");
+    when(gitRepoFiles.getPatchSetChangedFiles(coreLibs)).thenReturn(Set.of("src/span.h"));
+
+    String output =
+        groupTools.execute(
+            "get_content", "{\"file_path\":\"reviewai-topic-change-1/core-libs/src/span.h\"}");
+
+    assertEquals("span", output);
+  }
+
+  @Test
+  public void unprefixedPathsResolveToPrimaryChangeInReviewGroup() throws Exception {
+    OnDemandCodeContextTools groupTools = reviewGroupTools(reviewGroupMember("core-libs", 11));
+    when(gitRepoFiles.getPatchSetFileContent(change, "context.py")).thenReturn("primary");
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(null);
+
+    assertEquals("primary", groupTools.execute("get_content", "{\"file_path\":\"context.py\"}"));
+  }
+
+  @Test
+  public void treeOfReviewGroupMemberIsReportedWithItsPrefix() throws Exception {
+    GerritChange coreLibs = reviewGroupMember("core-libs", 11);
+    OnDemandCodeContextTools groupTools = reviewGroupTools(coreLibs);
+    when(gitRepoFiles.getPatchSetFileTree(config, coreLibs, "src"))
+        .thenReturn(List.of("src/span.h", "src/other.h"));
+    when(gitRepoFiles.getPatchSetChangedFiles(coreLibs)).thenReturn(Set.of("src/span.h"));
+
+    String output =
+        groupTools.execute("tree", "{\"subdir\":\"reviewai-topic-change-1/core-libs/src\"}");
+
+    assertEquals("reviewai-topic-change-1/core-libs/src/span.h", output);
+  }
+
+  @Test
+  public void grepSearchesEveryReviewGroupMemberWithPrefixes() throws Exception {
+    GerritChange coreLibs = reviewGroupMember("core-libs", 11);
+    OnDemandCodeContextTools groupTools = reviewGroupTools(coreLibs);
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(Set.of("main.c"));
+    when(gitRepoFiles.getPatchSetChangedFiles(coreLibs)).thenReturn(Set.of("src/span.h"));
+    when(gitRepoFiles.grepPatchSet(config, change, "span", Set.of("main.c")))
+        .thenReturn(List.of("main.c:3: use_span();"));
+    when(gitRepoFiles.grepPatchSet(config, coreLibs, "span", Set.of("src/span.h")))
+        .thenReturn(List.of("src/span.h:1: void use_span();"));
+
+    String output = groupTools.execute("grep", "{\"string\":\"span\"}");
+
+    assertEquals(
+        "reviewai-topic-change-0/PRIME/main.c:3: use_span();\n"
+            + "reviewai-topic-change-1/core-libs/src/span.h:1: void use_span();",
+        output);
+  }
+
+  @Test
   public void unsupportedToolReturnsEmptyOutput() {
     assertEquals("", tools.execute("get_context", "{}"));
+  }
+
+  private OnDemandCodeContextTools reviewGroupTools(GerritChange member) {
+    Map<String, GerritChange> changesByPrefix = new LinkedHashMap<>();
+    changesByPrefix.put("reviewai-topic-change-0/PRIME/", change);
+    changesByPrefix.put("reviewai-topic-change-1/" + member.getProjectName() + "/", member);
+    return new OnDemandCodeContextTools(config, change, gitRepoFiles, changesByPrefix);
+  }
+
+  private static GerritChange reviewGroupMember(String project, int number) {
+    GerritChange member =
+        new GerritChange(
+            Project.nameKey(project),
+            BranchNameKey.create(Project.nameKey(project), "master"),
+            Change.key("I" + number));
+    member.setChangeNumber(number);
+    member.setPatchSetNumber(1);
+    return member;
   }
 
   private String readTestFile(String filename) throws Exception {

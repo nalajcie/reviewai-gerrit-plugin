@@ -22,10 +22,15 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerr
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritClient;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.config.Configuration.TopicReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.listener.IEventHandlerType;
 import com.googlesource.gerrit.plugins.reviewai.review.PatchSetReviewer;
+import com.googlesource.gerrit.plugins.reviewai.review.topic.ReviewGroupMember;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -38,6 +43,7 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
   private final boolean administratorUser;
   private final TopicPatchSetReviewCoordinator topicPatchSetReviewCoordinator;
   private final AiReviewApplicabilityChecker aiReviewApplicabilityChecker;
+  private final ReviewGroupResolver reviewGroupResolver;
 
   EventHandlerTypePatchSetReview(
       Configuration config,
@@ -48,6 +54,29 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
       TopicPatchSetReviewCoordinator topicPatchSetReviewCoordinator,
       AiReviewApplicabilityChecker aiReviewApplicabilityChecker,
       boolean administratorUser) {
+    this(
+        config,
+        changeSetData,
+        change,
+        reviewer,
+        gerritClient,
+        topicPatchSetReviewCoordinator,
+        aiReviewApplicabilityChecker,
+        null,
+        administratorUser);
+  }
+
+  EventHandlerTypePatchSetReview(
+      Configuration config,
+      ChangeSetData changeSetData,
+      GerritChange change,
+      PatchSetReviewer reviewer,
+      GerritClient gerritClient,
+      TopicPatchSetReviewCoordinator topicPatchSetReviewCoordinator,
+      AiReviewApplicabilityChecker aiReviewApplicabilityChecker,
+      ReviewGroupResolver reviewGroupResolver,
+      boolean administratorUser) {
+    this.reviewGroupResolver = reviewGroupResolver;
     this.config = config;
     this.changeSetData = changeSetData;
     this.change = change;
@@ -82,6 +111,14 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
   @Override
   public void processEvent() throws Exception {
     log.debug("Starting patch set review for change ID: {}", change.getFullChangeId());
+    if (isReviewGroupScope()
+        && (changeSetData.getForcedTopicReview()
+            || !changeSetData.getForcedReview()
+            || changeSetData.getDeferredReview())) {
+      processReviewGroups();
+      log.debug("Completed patch set review for change ID: {}", change.getFullChangeId());
+      return;
+    }
     if (changeSetData.getForcedTopicReview()) {
       processForcedTopicReview();
       log.debug("Completed patch set review for change ID: {}", change.getFullChangeId());
@@ -132,6 +169,109 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
       return;
     }
     reviewer.reviewTopic(reviewableTopicChanges, administratorUser);
+  }
+
+  private boolean isReviewGroupScope() {
+    return reviewGroupResolver != null
+        && config.getTopicReviewScope() == TopicReviewScope.SUBMITTED_TOGETHER;
+  }
+
+  /**
+   * Reviews the multi-project review groups of the batched patch set events. A manual topic review
+   * reviews the group of this change immediately. Automatic and deferred reviews wait for the other
+   * events of the group, review each distinct group once per set of patch sets, and only when every
+   * reviewable member satisfies its {@code aiReviewApplicableIf} expression.
+   */
+  private void processReviewGroups() throws Exception {
+    boolean manualReview =
+        changeSetData.getForcedTopicReview()
+            || (changeSetData.getForcedReview() && !changeSetData.getDeferredReview());
+    List<GerritChange> triggeringChanges;
+    if (manualReview) {
+      triggeringChanges = List.of(change);
+    } else {
+      triggeringChanges =
+          topicPatchSetReviewCoordinator
+              .awaitReviewGroupBatch(change, config.getTopicPatchSetWaitMs())
+              .stream()
+              .filter(
+                  triggeringChange ->
+                      triggeringChange == change || isPatchSetReviewEnabled(triggeringChange))
+              .toList();
+      if (triggeringChanges.isEmpty()) {
+        log.debug("Review group batch already claimed for change ID: {}", change.getFullChangeId());
+        return;
+      }
+    }
+    for (List<ReviewGroupMember> group : resolveReviewGroups(triggeringChanges)) {
+      reviewGroup(group, manualReview);
+    }
+  }
+
+  private List<List<ReviewGroupMember>> resolveReviewGroups(List<GerritChange> triggeringChanges) {
+    // Resolve the group of this change first, so that it is preferred over identical groups of
+    // the other batched changes.
+    List<GerritChange> orderedTriggeringChanges = new ArrayList<>(triggeringChanges);
+    if (orderedTriggeringChanges.remove(change)) {
+      orderedTriggeringChanges.addFirst(change);
+    }
+    List<List<ReviewGroupMember>> groups = new ArrayList<>();
+    for (GerritChange triggeringChange : orderedTriggeringChanges) {
+      groups.add(
+          reviewGroupResolver.resolve(
+              triggeringChange == change ? config : null, gerritClient, triggeringChange));
+    }
+    // A group contained in another group of the batch, for example the group of an ancestor in a
+    // relation chain, is reviewed as part of the larger group.
+    List<List<ReviewGroupMember>> maximalGroups = new ArrayList<>();
+    for (int i = 0; i < groups.size(); i++) {
+      Set<String> members = memberIds(groups.get(i));
+      boolean contained = false;
+      for (int j = 0; j < groups.size() && !contained; j++) {
+        Set<String> otherMembers = memberIds(groups.get(j));
+        contained =
+            i != j
+                && otherMembers.containsAll(members)
+                && (otherMembers.size() > members.size() || j < i);
+      }
+      if (!contained) {
+        maximalGroups.add(groups.get(i));
+      }
+    }
+    return maximalGroups;
+  }
+
+  private static Set<String> memberIds(List<ReviewGroupMember> group) {
+    return group.stream()
+        .map(member -> member.change().getFullChangeId())
+        .collect(Collectors.toSet());
+  }
+
+  private void reviewGroup(List<ReviewGroupMember> group, boolean manualReview) throws Exception {
+    GerritChange triggeringChange = group.getFirst().change();
+    if (group.size() == 1) {
+      if (triggeringChange == change || prepareTopicChangeForReview(triggeringChange)) {
+        reviewer.review(triggeringChange, administratorUser);
+      }
+      return;
+    }
+    if (!manualReview && !reviewGroupResolver.isApplicable(group)) {
+      return;
+    }
+    if (!manualReview
+        && !topicPatchSetReviewCoordinator.claimReviewGroup(
+            group.stream().map(ReviewGroupMember::change).toList())) {
+      log.debug(
+          "Review group of change {} was already reviewed at its current patch sets",
+          triggeringChange.getFullChangeId());
+      return;
+    }
+    for (ReviewGroupMember member : group) {
+      if (member.reviewable() && member.change() != change) {
+        gerritClient.retrievePatchSetInfo(member.change());
+      }
+    }
+    reviewer.reviewGroup(group, administratorUser);
   }
 
   private boolean prepareTopicChangeForReview(GerritChange topicChange) {

@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 
 @Singleton
@@ -31,8 +32,9 @@ import lombok.extern.slf4j.Slf4j;
 public class TopicPatchSetReviewCoordinator {
   private static final int MAX_PROCESSED_EVENT_KEYS = 1000;
 
-  private final Map<TopicKey, Batch> pendingBatches = new LinkedHashMap<>();
+  private final Map<BatchKey, Batch> pendingBatches = new LinkedHashMap<>();
   private final LinkedHashMap<String, Boolean> processedEventKeys = new LinkedHashMap<>();
+  private final LinkedHashMap<String, Boolean> reviewedGroupSignatures = new LinkedHashMap<>();
 
   public synchronized void recordEvent(PatchSetEvent event) {
     GerritChange change = new GerritChange(event);
@@ -49,20 +51,62 @@ public class TopicPatchSetReviewCoordinator {
     if (topicKey.isEmpty()) {
       return Optional.empty();
     }
+    return awaitBatch(topicKey.get(), change, waitMs);
+  }
 
+  /**
+   * Waits for the patch set events that may belong to the same multi-project review group. Events
+   * are batched by topic across projects, or by project and branch for changes without a topic.
+   * Returns the batched changes to the caller that claims the batch, and an empty list to the other
+   * callers.
+   */
+  public synchronized List<GerritChange> awaitReviewGroupBatch(GerritChange change, int waitMs)
+      throws InterruptedException {
+    return awaitBatch(ReviewGroupKey.from(change), change, waitMs).orElse(List.of());
+  }
+
+  /**
+   * Claims the review of a review group identified by its members' change and patch set numbers.
+   * Returns {@code false} when the same group, at the same patch sets, was already claimed.
+   */
+  public synchronized boolean claimReviewGroup(List<GerritChange> members) {
+    String signature =
+        members.stream()
+            .map(
+                member ->
+                    member.getProjectName()
+                        + "~"
+                        + member.getChangeNumber().map(String::valueOf).orElse("?")
+                        + "/"
+                        + member
+                            .getPatchSetAttribute()
+                            .map(patchSet -> String.valueOf(patchSet.number))
+                            .orElse("?"))
+            .sorted()
+            .collect(Collectors.joining(","));
+    if (reviewedGroupSignatures.containsKey(signature)) {
+      log.debug("Skipping already claimed review group {}", signature);
+      return false;
+    }
+    remember(reviewedGroupSignatures, signature);
+    return true;
+  }
+
+  private Optional<List<GerritChange>> awaitBatch(
+      BatchKey batchKey, GerritChange change, int waitMs) throws InterruptedException {
     String eventKey = change.getPatchSetEventKey();
     if (processedEventKeys.containsKey(eventKey)) {
       log.debug("Skipping already processed topic patch set event {}", eventKey);
       return Optional.of(List.of());
     }
 
-    Batch batch = record(topicKey.get(), change);
+    Batch batch = record(batchKey, change);
     long deadline = batch.createdAtMillis + waitMs;
     while (!batch.claimed) {
       long remainingMillis = deadline - System.currentTimeMillis();
       if (remainingMillis <= 0) {
         batch.claimed = true;
-        pendingBatches.remove(topicKey.get());
+        pendingBatches.remove(batchKey);
         List<GerritChange> changes = batch.changes();
         changes.forEach(queuedChange -> rememberProcessed(queuedChange.getPatchSetEventKey()));
         notifyAll();
@@ -73,18 +117,22 @@ public class TopicPatchSetReviewCoordinator {
     return Optional.of(List.of());
   }
 
-  private Batch record(TopicKey topicKey, GerritChange change) {
-    Batch batch = pendingBatches.computeIfAbsent(topicKey, ignored -> new Batch());
+  private Batch record(BatchKey batchKey, GerritChange change) {
+    Batch batch = pendingBatches.computeIfAbsent(batchKey, ignored -> new Batch());
     batch.record(change);
     notifyAll();
     return batch;
   }
 
   private void rememberProcessed(String eventKey) {
-    processedEventKeys.put(eventKey, Boolean.TRUE);
-    while (processedEventKeys.size() > MAX_PROCESSED_EVENT_KEYS) {
-      String firstKey = processedEventKeys.keySet().iterator().next();
-      processedEventKeys.remove(firstKey);
+    remember(processedEventKeys, eventKey);
+  }
+
+  private static void remember(LinkedHashMap<String, Boolean> keys, String key) {
+    keys.put(key, Boolean.TRUE);
+    while (keys.size() > MAX_PROCESSED_EVENT_KEYS) {
+      String firstKey = keys.keySet().iterator().next();
+      keys.remove(firstKey);
     }
   }
 
@@ -102,7 +150,21 @@ public class TopicPatchSetReviewCoordinator {
     }
   }
 
-  private record TopicKey(String project, String branch, String topic) {
+  private interface BatchKey {}
+
+  private record ReviewGroupKey(String project, String branch, String topic) implements BatchKey {
+    static ReviewGroupKey from(GerritChange change) {
+      return change
+          .getTopic()
+          .map(topic -> new ReviewGroupKey(null, null, topic))
+          .orElseGet(
+              () ->
+                  new ReviewGroupKey(
+                      change.getProjectName(), change.getBranchNameKey().branch(), null));
+    }
+  }
+
+  private record TopicKey(String project, String branch, String topic) implements BatchKey {
     static Optional<TopicKey> from(GerritChange change) {
       return change
           .getTopic()

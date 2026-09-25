@@ -1,7 +1,7 @@
 {
   "type": "function",
   "name": "get_content",
-  "description": "Return the content of a file by path relative to the git project root.",
+  "description": "Return the content of a file by path relative to the git project root. When the patch merges several changes, a path may start with the ReviewAI origin prefix of a change (`reviewai-topic-change-<N>/<project>/`) to address that change's repository at its current patch set; paths without a prefix address the primary change.",
   "strict": false,
   "parameters": {
     "type": "object",
