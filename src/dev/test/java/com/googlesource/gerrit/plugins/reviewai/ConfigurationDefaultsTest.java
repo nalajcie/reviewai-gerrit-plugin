@@ -689,6 +689,12 @@ public class ConfigurationDefaultsTest {
         List.of("common-libs", "dsp-libs:refs/heads/main"), configuration.getCodeContextProject());
   }
 
+  @Test
+  public void shouldDefaultTopicReviewScopeToProjectBranch() {
+    assertEquals(
+        Configuration.TopicReviewScope.PROJECT_BRANCH, createConfiguration().getTopicReviewScope());
+  }
+
   private Configuration createConfiguration() {
     return createConfiguration(new String[] {}, new String[] {});
   }
