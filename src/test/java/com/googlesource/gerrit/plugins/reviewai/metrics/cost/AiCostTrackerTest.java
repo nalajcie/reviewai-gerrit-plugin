@@ -70,6 +70,19 @@ public class AiCostTrackerTest {
     assertEquals(0, metrics.nanoUsd);
   }
 
+  @Test
+  public void attributesEstimatedCostToProject() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getSelectedAiModelRoute())
+        .thenReturn(new AiModelRoute(AiProviderType.OPENAI, "gpt-5.4"));
+    RecordingMetrics metrics = new RecordingMetrics();
+
+    new AiCostTracker(config, metrics).record(response(), "core-libs");
+
+    assertEquals("core-libs", metrics.project);
+    assertEquals(55_000, metrics.nanoUsd);
+  }
+
   private static ChatResponse response() {
     return ChatResponse.builder()
         .aiMessage(AiMessage.from("ok"))
@@ -80,10 +93,13 @@ public class AiCostTrackerTest {
   private static class RecordingMetrics extends ReviewAiMetrics {
     private long nanoUsd;
     private int pricingMissing;
+    private String project;
 
     @Override
-    public void recordAiEstimatedCostNanoUsd(String provider, String model, long nanoUsd) {
+    public void recordAiEstimatedCostNanoUsd(
+        String provider, String model, String project, long nanoUsd) {
       this.nanoUsd += nanoUsd;
+      this.project = project;
     }
 
     @Override

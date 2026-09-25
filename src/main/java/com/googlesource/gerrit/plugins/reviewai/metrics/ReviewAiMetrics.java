@@ -24,6 +24,7 @@ import com.google.gerrit.metrics.Field;
 import com.google.gerrit.metrics.MetricMaker;
 import com.google.gerrit.metrics.Timer2;
 import com.google.gerrit.metrics.Timer3;
+import com.google.gerrit.server.logging.Metadata;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ReviewAssistantStage;
@@ -34,11 +35,12 @@ import java.util.concurrent.TimeUnit;
 public class ReviewAiMetrics {
   private static final String UNKNOWN_VALUE = "unknown";
 
-  private final Counter2<String, String> reviewRunCount;
+  private final Counter3<String, String, String> reviewRunCount;
   private final Timer2<String, String> reviewRunLatency;
   private final Counter3<String, String, String> aiRequestCount;
+  private final Counter3<String, String, String> aiRequestProjectCount;
   private final Timer3<String, String, String> aiRequestLatency;
-  private final Counter2<String, String> aiEstimatedCostNanoUsd;
+  private final Counter3<String, String, String> aiEstimatedCostNanoUsd;
   private final Counter2<String, String> aiPricingMissing;
 
   @Inject
@@ -63,13 +65,18 @@ public class ReviewAiMetrics {
         Field.ofString("stage", (metadataBuilder, fieldValue) -> {})
             .description("Review assistant stage")
             .build();
+    Field<String> projectField =
+        Field.ofString("project", Metadata.Builder::projectName)
+            .description("Gerrit project name")
+            .build();
 
     reviewRunCount =
         metricMaker.newCounter(
             "reviewai/review_run/count",
             new Description("ReviewAI event processing attempts").setRate().setUnit("runs"),
             eventTypeField,
-            statusField);
+            statusField,
+            projectField);
     reviewRunLatency =
         metricMaker.newTimer(
             "reviewai/review_run/latency",
@@ -85,6 +92,17 @@ public class ReviewAiMetrics {
             providerField,
             stageField,
             statusField);
+    // Gerrit counters support at most three fields, so the per-project request count is a
+    // separate metric instead of a fourth field of reviewai/ai_request/count.
+    aiRequestProjectCount =
+        metricMaker.newCounter(
+            "reviewai/ai_request/project_count",
+            new Description("ReviewAI AI backend requests per project")
+                .setRate()
+                .setUnit("requests"),
+            projectField,
+            providerField,
+            statusField);
     aiRequestLatency =
         metricMaker.newTimer(
             "reviewai/ai_request/latency",
@@ -99,7 +117,8 @@ public class ReviewAiMetrics {
             "reviewai/ai_request/estimated_cost_nanousd",
             new Description("Estimated ReviewAI provider cost").setCumulative().setUnit("nanoUSD"),
             providerField,
-            modelField);
+            modelField,
+            projectField);
     aiPricingMissing =
         metricMaker.newCounter(
             "reviewai/ai_request/pricing_missing",
@@ -115,45 +134,66 @@ public class ReviewAiMetrics {
     reviewRunCount = null;
     reviewRunLatency = null;
     aiRequestCount = null;
+    aiRequestProjectCount = null;
     aiRequestLatency = null;
     aiEstimatedCostNanoUsd = null;
     aiPricingMissing = null;
   }
 
   public MetricTimer startReviewRun(String eventType) {
+    return startReviewRun(eventType, null);
+  }
+
+  public MetricTimer startReviewRun(String eventType, String project) {
     return new MetricTimer(
-        (status, elapsedNanos) -> recordReviewRun(eventType, status, elapsedNanos));
+        (status, elapsedNanos) -> recordReviewRun(eventType, project, status, elapsedNanos));
   }
 
   public MetricTimer startAiRequest(
       Enum<?> provider, String model, Enum<?> stage, String specializedAgentName) {
+    return startAiRequest(provider, model, stage, specializedAgentName, null);
+  }
+
+  public MetricTimer startAiRequest(
+      Enum<?> provider, String model, Enum<?> stage, String specializedAgentName, String project) {
     String stageLabel = aiRequestStageLabel(stage, specializedAgentName);
     return new MetricTimer(
         (status, elapsedNanos) ->
-            recordAiRequest(provider, model, stageLabel, status, elapsedNanos));
+            recordAiRequest(provider, model, stageLabel, project, status, elapsedNanos));
   }
 
-  private void recordReviewRun(String eventType, String status, long elapsedNanos) {
+  private void recordReviewRun(String eventType, String project, String status, long elapsedNanos) {
     if (reviewRunCount == null || reviewRunLatency == null) {
       return;
     }
-    reviewRunCount.increment(label(eventType), label(status));
+    reviewRunCount.increment(label(eventType), label(status), label(project));
     reviewRunLatency.record(label(eventType), label(status), elapsedNanos, TimeUnit.NANOSECONDS);
   }
 
   private void recordAiRequest(
-      Enum<?> provider, String model, String stage, String status, long elapsedNanos) {
-    if (aiRequestCount == null || aiRequestLatency == null) {
+      Enum<?> provider,
+      String model,
+      String stage,
+      String project,
+      String status,
+      long elapsedNanos) {
+    if (aiRequestCount == null || aiRequestProjectCount == null || aiRequestLatency == null) {
       return;
     }
     aiRequestCount.increment(label(provider), label(stage), label(status));
+    aiRequestProjectCount.increment(label(project), label(provider), label(status));
     aiRequestLatency.record(
         label(provider), label(model), label(stage), elapsedNanos, TimeUnit.NANOSECONDS);
   }
 
   public void recordAiEstimatedCostNanoUsd(String provider, String model, long nanoUsd) {
+    recordAiEstimatedCostNanoUsd(provider, model, null, nanoUsd);
+  }
+
+  public void recordAiEstimatedCostNanoUsd(
+      String provider, String model, String project, long nanoUsd) {
     if (aiEstimatedCostNanoUsd != null) {
-      aiEstimatedCostNanoUsd.incrementBy(label(provider), label(model), nanoUsd);
+      aiEstimatedCostNanoUsd.incrementBy(label(provider), label(model), label(project), nanoUsd);
     }
   }
 

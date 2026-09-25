@@ -38,6 +38,11 @@ public final class AiCostTracker {
   }
 
   public void record(ChatResponse response) {
+    record(response, null);
+  }
+
+  /** Records the estimated cost of one provider response, attributed to a Gerrit project. */
+  public void record(ChatResponse response, String project) {
     if (config == null || metrics == null || response == null) {
       return;
     }
@@ -59,7 +64,7 @@ public final class AiCostTracker {
           AiCostCalculator.calculateNanoUsd(pricing.get(), response.tokenUsage());
       if (nanoUsd.isPresent()) {
         metrics.recordAiEstimatedCostNanoUsd(
-            route.providerRoute(), route.model(), nanoUsd.getAsLong());
+            route.providerRoute(), route.model(), project, nanoUsd.getAsLong());
       } else {
         log.debug("AI response has no complete token usage for cost calculation: {}", route);
       }

@@ -90,7 +90,8 @@ final class PreparedEventHandlerTask {
   }
 
   private Result execute(EventProcessor processor) {
-    ReviewAiMetrics.MetricTimer reviewRunTimer = metrics.startReviewRun(change.getEventType());
+    ReviewAiMetrics.MetricTimer reviewRunTimer =
+        metrics.startReviewRun(change.getEventType(), change.getProjectName());
     AiRequestCancellation cancellation = AiRequestCancellation.current();
     changeSetData.setAiRequestCancellation(cancellation);
     try (AiRequestCancellation.Work ignored = cancellation.beginWork()) {

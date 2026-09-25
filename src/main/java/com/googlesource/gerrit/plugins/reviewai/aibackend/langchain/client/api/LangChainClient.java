@@ -541,7 +541,8 @@ public class LangChainClient extends AiClientBase implements IAiClient {
             providerType,
             config.getAiModel(),
             changeSetData.getReviewAssistantStage(),
-            changeSetData.getSpecializedAgentName());
+            changeSetData.getSpecializedAgentName(),
+            change.getProjectName());
     try {
       boolean useOpenAiResponses = shouldUseOpenAiResponses(providerType);
       var prompt = AiPromptFactory.getAiPrompt(config, changeSetData, change, codeContextPolicy);

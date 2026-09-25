@@ -92,14 +92,15 @@ prometheus \
 ReviewAI registers metrics eagerly when the plugin loads, so the metric names are visible before the first review event
 runs. Values remain zero until an instrumented ReviewAI path records activity.
 
-| Gerrit metric                                | Type    | Dimensions                    | Description                                                      |
-|----------------------------------------------|---------|-------------------------------|------------------------------------------------------------------|
-| `reviewai/review_run/count`                  | Counter | `event_type`, `status`        | Number of ReviewAI event processing attempts.                    |
-| `reviewai/review_run/latency`                | Timer   | `event_type`, `status`        | End-to-end ReviewAI event processing latency.                    |
-| `reviewai/ai_request/count`                  | Counter | `provider`, `stage`, `status` | Number of backend requests made by ReviewAI.                     |
-| `reviewai/ai_request/latency`                | Timer   | `provider`, `model`, `stage`  | AI backend request latency.                                      |
-| `reviewai/ai_request/estimated_cost_nanousd` | Counter | `provider`, `model`           | Cumulative estimated provider cost in nanoUSD.                   |
-| `reviewai/ai_request/pricing_missing`        | Counter | `provider`, `model`           | Responses whose exact provider/model route has no pricing entry. |
+| Gerrit metric                                | Type    | Dimensions                      | Description                                                      |
+|----------------------------------------------|---------|---------------------------------|------------------------------------------------------------------|
+| `reviewai/review_run/count`                  | Counter | `event_type`, `status`, `project` | Number of ReviewAI event processing attempts.                  |
+| `reviewai/review_run/latency`                | Timer   | `event_type`, `status`          | End-to-end ReviewAI event processing latency.                    |
+| `reviewai/ai_request/count`                  | Counter | `provider`, `stage`, `status`   | Number of backend requests made by ReviewAI.                     |
+| `reviewai/ai_request/project_count`          | Counter | `project`, `provider`, `status` | Number of backend requests made by ReviewAI, per project.        |
+| `reviewai/ai_request/latency`                | Timer   | `provider`, `model`, `stage`    | AI backend request latency.                                      |
+| `reviewai/ai_request/estimated_cost_nanousd` | Counter | `provider`, `model`, `project`  | Cumulative estimated provider cost in nanoUSD.                   |
+| `reviewai/ai_request/pricing_missing`        | Counter | `provider`, `model`             | Responses whose exact provider/model route has no pricing entry. |
 
 ### Review Runs and Backend Requests
 
@@ -130,6 +131,7 @@ estimated-cost metrics to measure provider spend.
 
 - `event_type`: Gerrit event type, such as `patchset_created`, or `comment_added` if Gerrit does not provide it.
 - `status`: `completed` when event processing succeeds, or `error` when processing throws an exception.
+- `project`: name of the Gerrit project of the change whose event is processed (count only).
 
 Review-run telemetry starts after event preprocessing succeeds. Unsupported events and events rejected during
 preprocessing return `NOT_SUPPORTED` and do not increment these metrics.
@@ -141,10 +143,17 @@ preprocessing return `NOT_SUPPORTED` and do not increment these metrics.
 - `stage`: ReviewAI assistant stage, including the agent specialization for specialized-agent requests, or `unknown`
   if no stage is available.
 - `status`: `completed` for a non-null AI response, `empty` for a null AI response, or `error` when the request fails.
+- `project`: name of the Gerrit project of the change the request is made for (`project_count` and
+  `estimated_cost_nanousd` only). For a multi-project review group, this is the project of the change the merged
+  request is made for.
+
+Gerrit counters support at most three dimensions. `reviewai/ai_request/count` already has three, so the per-project
+request count is the separate `reviewai/ai_request/project_count` metric. The `project` dimension carries only the
+project name, never user or change identifiers, to keep the number of series bounded by the number of projects.
 
 The no-value fallback for every dimension is `unknown`.
 
-Cost telemetry uses the configured provider/model route as its dimensions. For example, a request configured as
+Cost telemetry uses the configured provider/model route and the project as its dimensions. For example, a request configured as
 `OpenAI/gpt-5.4` is attributed to provider `OpenAI` and model `gpt-5.4`, even if the provider response identifies a
 dated backend snapshot. Model routes are matched exactly for pricing; an arbitrary route such as
 `OpenAI/gpt-5.4-2026-06-15` does not automatically inherit the `OpenAI/gpt-5.4` price.
@@ -343,24 +352,25 @@ Typical exported names include:
 | Prometheus metric                                                                              | Meaning                                                                     |
 |------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|
 | `plugins_reviewai_gerrit_plugin_reviewai_review_run_count_total_total`                         | Aggregate ReviewAI review-run counter.                                      |
-| `plugins_reviewai_gerrit_plugin_reviewai_review_run_count_<event_type>_<status>_total`         | ReviewAI review-run counter for one event type and status.                  |
+| `plugins_reviewai_gerrit_plugin_reviewai_review_run_count_<event_type>_<status>_<project>_total` | ReviewAI review-run counter for one event type, status, and project.      |
 | `plugins_reviewai_gerrit_plugin_reviewai_review_run_latency_total`                             | Aggregate ReviewAI review-run latency summary.                              |
 | `plugins_reviewai_gerrit_plugin_reviewai_review_run_latency_total_count`                       | Aggregate ReviewAI review-run latency sample count.                         |
 | `plugins_reviewai_gerrit_plugin_reviewai_review_run_latency_<event_type>_<status>`             | ReviewAI review-run latency summary for one event type and status.          |
 | `plugins_reviewai_gerrit_plugin_reviewai_review_run_latency_<event_type>_<status>_count`       | ReviewAI review-run latency sample count for one event type and status.     |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_count_total_total`                         | Aggregate AI backend request counter.                                       |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_count_<provider>_<stage>_<status>_total`   | AI backend request counter for one provider, stage, and status.             |
+| `plugins_reviewai_gerrit_plugin_reviewai_ai_request_project_count_<project>_<provider>_<status>_total` | AI backend request counter for one project, provider, and status. |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_latency_total`                             | Aggregate AI backend request latency summary.                               |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_latency_total_count`                       | Aggregate AI backend request latency sample count.                          |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_latency_<provider>_<model>_<stage>`        | AI backend request latency summary for one provider, model, and stage.      |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_latency_<provider>_<model>_<stage>_count`  | AI backend request latency sample count for one provider, model, and stage. |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_total`              | Aggregate estimated-cost counter in nanoUSD.                                |
-| `plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_<provider>_<model>` | Estimated-cost counter for one provider/model route.                        |
+| `plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_<provider>_<model>_<project>` | Estimated-cost counter for one provider/model route and project. |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_pricing_missing_total_total`               | Aggregate missing-pricing counter.                                          |
 | `plugins_reviewai_gerrit_plugin_reviewai_ai_request_pricing_missing_<provider>_<model>_total`  | Missing-pricing counter for one provider/model route.                       |
 
 For the cumulative estimated-cost metric, Gerrit names the aggregate bucket with a `_total` suffix. The individual
-provider/model buckets do not have that suffix; the Prometheus reporter only converts the `/` separators in Gerrit's
+provider/model/project buckets do not have that suffix; the Prometheus reporter only converts the `/` separators in Gerrit's
 bucket names to `_` characters.
 
 Timer metrics are exported as summaries with quantile samples such as `0.5`, `0.75`, `0.95`, `0.98`, `0.99`, and
@@ -427,28 +437,28 @@ plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_total 
 rate(plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_total[5m]) * 3600 / 1e9
 ```
 
-- List per-provider/model cost counters converted to USD:
+- List per-provider/model/project cost counters converted to USD:
 
 ```promql
 label_replace(
   {__name__=~"plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_.+_.+"},
-  "provider_model",
+  "provider_model_project",
   "$1",
   "__name__",
   "plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_(.+)"
 ) / 1e9
 ```
 
-- Typical exact query for the configured `OpenAI/gpt-5.4` route:
+- Typical exact query for the configured `OpenAI/gpt-5.4` route and the `core-libs` project:
 
 ```promql
-plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_OpenAI_gpt_5_4 / 1e9
+plugins_reviewai_gerrit_plugin_reviewai_ai_request_estimated_cost_nanousd_OpenAI_gpt_5_4_core_libs / 1e9
 ```
 
 - Failed ReviewAI review runs in the last 24 hours:
 
 ```promql
-sum(increase({__name__=~"plugins_reviewai_gerrit_plugin_reviewai_review_run_count_.*_error_total"}[24h]))
+sum(increase({__name__=~"plugins_reviewai_gerrit_plugin_reviewai_review_run_count_.*_error_.*_total"}[24h]))
 ```
 
 - Failed AI backend requests in the last 24 hours:

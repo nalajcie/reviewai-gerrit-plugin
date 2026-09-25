@@ -274,7 +274,8 @@ public class LangChainExecutorTest {
     private long nanoUsd;
 
     @Override
-    public void recordAiEstimatedCostNanoUsd(String provider, String model, long nanoUsd) {
+    public void recordAiEstimatedCostNanoUsd(
+        String provider, String model, String project, long nanoUsd) {
       this.nanoUsd += nanoUsd;
     }
   }

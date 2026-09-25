@@ -71,7 +71,7 @@ class LangChainExecutor {
     ChatRequest initialRequest = buildChatRequest(requestMessages, getInitialToolChoice());
     log.debug("Sending initial LangChain chat request: {}", LogArg.truncated(initialRequest));
     ChatResponse response = AiModelRequestLimiter.chat(config, model, initialRequest);
-    recordCost(response);
+    recordCost(response, change);
     AiMessage aiMessage = response != null ? response.aiMessage() : null;
     logAiMessageToolRequests("initial", aiMessage);
     int maxToolResponseRounds = config.getAiMaxToolResponseRounds();
@@ -115,7 +115,7 @@ class LangChainExecutor {
               buildChatRequest(
                   requestMessages,
                   iteration == maxToolResponseRounds ? ToolChoice.NONE : ToolChoice.AUTO));
-      recordCost(response);
+      recordCost(response, change);
       aiMessage = response != null ? response.aiMessage() : null;
       logAiMessageToolRequests("tool-continuation-" + iteration, aiMessage);
     }
@@ -136,9 +136,9 @@ class LangChainExecutor {
     return aiMessage;
   }
 
-  private void recordCost(ChatResponse response) {
+  private void recordCost(ChatResponse response, GerritChange change) {
     if (costTracker != null) {
-      costTracker.record(response);
+      costTracker.record(response, change == null ? null : change.getProjectName());
     }
   }
 
