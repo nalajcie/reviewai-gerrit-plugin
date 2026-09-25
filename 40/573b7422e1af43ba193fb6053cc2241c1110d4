@@ -1,0 +1,59 @@
+src/dev/test/java/com/googlesource/gerrit/plugins/reviewai/ConfigurationDefaultsTest.java
+  s_99ebfbf269eb4b::t_6d17cd00d6cdc8 676-691
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/api/git/GitRepoFiles.java
+  s_99ebfbf269eb4b::t_935292e1d2d39f 25,40,46,51-64,155-276
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/code/context/ondemand/CodeContextProjectResolver.java
+  s_99ebfbf269eb4b::t_4c5fbc2aa048ae 1-135
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/code/context/ondemand/OnDemandCodeContextTools.java
+  s_99ebfbf269eb4b::t_a05447326b3d9d 27,30,32,51-53,62,80-92,94,139-140,159-165,173-192,194-211,233-242,260,264-280,326-350
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/agents/level0/singleagent/AiPromptReview.java
+  s_99ebfbf269eb4b::t_c1949431046359 36,270-285
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/model/data/ChangeSetData.java
+  s_99ebfbf269eb4b::t_7da1662f5485b8 75-76,180
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/model/data/CodeContextProject.java
+  s_99ebfbf269eb4b::t_73bcab6126b1d8 1-33
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutor.java
+  s_99ebfbf269eb4b::t_2a142e65bd382e 202-206
+src/main/java/com/googlesource/gerrit/plugins/reviewai/config/Configuration.java
+  s_99ebfbf269eb4b::t_2b84ee033be1bf 87,118,134,320-323
+src/main/java/com/googlesource/gerrit/plugins/reviewai/review/PatchSetReviewer.java
+  s_99ebfbf269eb4b::t_1b73f6cf29be79 25,74,93,105,410-413
+src/main/resources/config/agents/level0/single-agent/prompts.json
+  s_99ebfbf269eb4b::t_ea9bfa8b9f4c2d 19
+src/main/resources/config/getContentTool.json
+  s_99ebfbf269eb4b::t_0299f0476083ab 4
+src/main/resources/config/grepTool.json
+  s_99ebfbf269eb4b::t_3ad0ff976218db 4,12-15
+src/main/resources/config/treeTool.json
+  s_99ebfbf269eb4b::t_383625e4fd743f 4
+src/test/java/com/googlesource/gerrit/plugins/reviewai/ReviewTestBase.java
+  s_99ebfbf269eb4b::t_ae6915f1c2589c 436
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/api/git/GitRepoFilesTest.java
+  s_99ebfbf269eb4b::t_9c65c0adf758b2 34,252-322
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/code/context/ondemand/CodeContextProjectResolverTest.java
+  s_99ebfbf269eb4b::t_459bdc9229c27c 1-139
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/code/context/ondemand/OnDemandCodeContextToolsTest.java
+  s_99ebfbf269eb4b::t_56e67009a86f53 21-23,34,238-290,296-304
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/AiPromptFactoryTest.java
+  s_99ebfbf269eb4b::t_e020f04a6e44f5 40,629-650
+src/test/java/com/googlesource/gerrit/plugins/reviewai/review/PatchSetReviewerTest.java
+  s_99ebfbf269eb4b::t_d561b1d44dfe9b 130,156
+src/test/resources/__files/commands/dumpConfig.txt
+  s_99ebfbf269eb4b::t_335e3ca0b6af66 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "40573b7422e1af43ba193fb6053cc2241c1110d4",
+  "prompts": {},
+  "sessions": {
+    "s_99ebfbf269eb4b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3bc8480-1401-4289-98e9-b54aae12878c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
