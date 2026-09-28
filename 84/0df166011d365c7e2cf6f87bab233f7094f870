@@ -1,0 +1,37 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/metrics/ReviewAiMetrics.java
+  s_99ebfbf269eb4b::t_5c3bd7a48123c6 27,38,41,43,68-71,78-79,95-105,120-121,137,144-147,149,154-158,162,165,169,174-180,184,190-194,196
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/agents/level1/LangChainMultiAgentReviewClient.java
+  s_99ebfbf269eb4b::t_6d511ac4b70060 450
+src/main/java/com/googlesource/gerrit/plugins/reviewai/listener/PreparedEventHandlerTask.java
+  s_99ebfbf269eb4b::t_28b15e22816608 93-94
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainClient.java
+  s_99ebfbf269eb4b::t_fb93d3f1a11e24 544-545
+src/test/java/com/googlesource/gerrit/plugins/reviewai/metrics/ReviewAiMetricsTest.java
+  s_99ebfbf269eb4b::t_81bfdea40c217c 20-25,27-28,30,56-84
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutor.java
+  s_99ebfbf269eb4b::t_1299654274fcee 74,118,139,141
+src/test/java/com/googlesource/gerrit/plugins/reviewai/metrics/cost/AiCostTrackerTest.java
+  s_99ebfbf269eb4b::t_c514a254b408fb 73-85,96,99-100,102
+docs/telemetry.md
+  s_99ebfbf269eb4b::t_82e44f69773bde 95-103,134,146-152,156,355,362,368,373,440,445,452,455,461
+src/main/java/com/googlesource/gerrit/plugins/reviewai/metrics/cost/AiCostTracker.java
+  s_99ebfbf269eb4b::t_39724a861ce538 41-45,67
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutorTest.java
+  s_99ebfbf269eb4b::t_4503f44a367a6a 277-278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "840df166011d365c7e2cf6f87bab233f7094f870",
+  "prompts": {},
+  "sessions": {
+    "s_99ebfbf269eb4b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3bc8480-1401-4289-98e9-b54aae12878c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
