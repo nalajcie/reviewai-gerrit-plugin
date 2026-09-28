@@ -244,6 +244,11 @@ public class GerritClientReview extends GerritClientAccount {
       boolean emptyComments,
       String systemMessage) {
     List<String> messages = new ArrayList<>();
+    if (changeSetData.getReviewScopeNote() != null) {
+      messages.add(
+          SystemMessageFormatter.getPrefixedSystemMessage(
+              localizer, changeSetData.getReviewScopeNote()));
+    }
     if (changeSetData.getReviewNoticeMessage() != null) {
       messages.add(
           SystemMessageFormatter.getPrefixedSystemMessage(

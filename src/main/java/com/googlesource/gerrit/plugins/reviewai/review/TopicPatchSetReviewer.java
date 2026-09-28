@@ -160,7 +160,18 @@ class TopicPatchSetReviewer {
           mergedPatchSetLines,
           config.getMaxReviewLines(),
           singleReviewedChange.getFullChangeId());
-      reviewSingleGroupMember(members, patchSets, singleReviewedChange, includeAiFailureDetails);
+      changeSetData.setReviewScopeNote(
+          String.format(
+              localizer.getText("message.review.group.over.limit"),
+              patchSets.size(),
+              mergedPatchSetLines,
+              config.getMaxReviewLines()));
+      try {
+        reviewSingleGroupMember(
+            members, patchSets, singleReviewedChange, includeAiFailureDetails);
+      } finally {
+        changeSetData.setReviewScopeNote(null);
+      }
       return;
     }
 

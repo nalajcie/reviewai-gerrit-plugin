@@ -79,6 +79,8 @@ public class ChangeSetData {
   private transient boolean suggestionReviewPass;
   // Review group summary prepended to the patch when only the triggering change is reviewed.
   private transient String reviewGroupHeader;
+  // Tells the user why a group review covered less than they asked for; shown in the message.
+  private transient String reviewScopeNote;
   // Read-only repositories exposed to the on-demand code context tools, resolved once per review.
   private transient List<CodeContextProject> codeContextProjects = List.of();
 
@@ -185,6 +187,7 @@ public class ChangeSetData {
     copy.setAiUsageSummary(aiUsageSummary);
     copy.setReviewGroupChangesByPrefix(reviewGroupChangesByPrefix);
     copy.setReviewGroupHeader(reviewGroupHeader);
+    copy.setReviewScopeNote(reviewScopeNote);
     copy.setSuggestionReviewPass(suggestionReviewPass);
     copy.setCodeContextProjects(codeContextProjects);
     copy.setForcedReview(forcedReview);

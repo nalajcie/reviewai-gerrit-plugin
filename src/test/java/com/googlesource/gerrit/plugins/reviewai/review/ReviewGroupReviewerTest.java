@@ -154,10 +154,14 @@ public class ReviewGroupReviewerTest {
   @Test
   public void reviewsOnlyTriggeringChangeWithMemberListWhenGroupIsTooLarge() throws Exception {
     when(config.getMaxReviewLines()).thenReturn(5);
+    when(localizer.getText("message.review.group.over.limit"))
+        .thenReturn("Only this change: %d changes, %d lines, limit %d");
     List<String> headers = new ArrayList<>();
+    List<String> scopeNotes = new ArrayList<>();
     doAnswer(
             invocation -> {
               headers.add(changeSetData.getReviewGroupHeader());
+              scopeNotes.add(changeSetData.getReviewScopeNote());
               return null;
             })
         .when(patchSetReviewer)
@@ -174,6 +178,8 @@ public class ReviewGroupReviewerTest {
     assertTrue(headers.getFirst().contains("ReviewAI review group members:"));
     assertTrue(headers.getFirst().contains("Only the patch of change 10 is included below"));
     assertNull(changeSetData.getReviewGroupHeader());
+    assertTrue(scopeNotes.getFirst().matches("Only this change: \\d changes, \\d+ lines, limit 5"));
+    assertNull(changeSetData.getReviewScopeNote());
   }
 
   @Test

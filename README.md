@@ -20,6 +20,7 @@
 | tool budget | Every tool result tells the model how many tool rounds are left; calls past `aiMaxToolResponseRounds` are rejected with a request for the final answer, instead of ending the review without one. Always on. |
 | Review Agent action | "Review With Related Changes" runs `/review --topic`; its hover text shows the `maxReviewLines` limit. |
 | `/help` | Lists only the commands the user can run in this build and role. |
+| group review over `maxReviewLines` | When a review group is reduced to the triggering change, the review message says so, with the group's size and the limit. |
 | Maven dev build | `mvn -Pdev package` builds the development variant (`DevModule`: `/show`, `/directives`, `/configure`, `--debug`). |
 
 Bug fixes also in this fork, submitted upstream:
@@ -35,7 +36,8 @@ Fixes kept in this fork for now (fork-specific code paths or not yet proposed up
   total). The estimate now bills `total - input` as output, and each priced response is logged with its token usage.
 - Commit-message comments ended up at patch-set level: `/COMMIT_MSG` is now anchored in reviews (not only in suggest
   mode), replies of the commit-message agent are pinned to the commit message (in a merged review group to the member
-  whose commit message they quote), and `COMMIT_MSG` without the slash is accepted.
+  whose commit message they quote), `COMMIT_MSG` without the slash is accepted, and a comment is anchored to the lines
+  it quotes (e.g. the subject) instead of the whole message; suggested edits still cover the whole message.
 - `get_content` returned binary files as text (a 500 KB flash loader added 155k tokens to every later request) and did
   not limit size; binary and LFS files are now reported without content and text is cut at 64 KB.
 - Group reviews used the comments of the last group member for the reviewed change ("Pending review feedback comment is

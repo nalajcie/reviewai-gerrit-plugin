@@ -138,6 +138,20 @@ public class GerritClientReviewTest {
   }
 
   @Test
+  public void reviewMessageExplainsAReducedGroupReview() throws Exception {
+    changeSetData.setReviewScopeNote("Only this change was reviewed.");
+    ReviewBatch inlineComment = new ReviewBatch("Inline comment");
+    inlineComment.setFilename("src/Example.java");
+    inlineComment.setLine(42);
+
+    client.setReview(change, List.of(inlineComment), changeSetData);
+
+    ArgumentCaptor<ReviewInput> reviewInputCaptor = ArgumentCaptor.forClass(ReviewInput.class);
+    verify(revisionApi).review(reviewInputCaptor.capture());
+    assertTrue(reviewInputCaptor.getValue().message.contains("Only this change was reviewed."));
+  }
+
+  @Test
   public void reviewMessageHasNoUsageUnlessEnabled() throws Exception {
     changeSetData.getAiUsageSummary().add("gemini-3.8-flash", 23_000, 1_400, 19_000_000L);
 
