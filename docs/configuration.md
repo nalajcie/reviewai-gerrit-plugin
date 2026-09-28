@@ -441,9 +441,25 @@ codeContextProject = platform/headers:release-2.0
   [AI Request Coordination](architecture/request-coordination.md#concurrency-boundaries) for the distinction between
   model-request concurrency and durable request execution.
 - `aiMaxMemoryTokens`: Maximum number of tokens retained in LangChain memory per Change, Patch Set, and review scope.
-  The default value is 16K.
+  The default value is 16K. The window also holds the prompt of the current request: a prompt larger than this value
+  is evicted, and the provider receives an empty request (Gemini: `contents is not specified`). With
+  `aiFullFileReview` and `maxReviewLines` in the thousands, set it well above the prompt size (for example `200000`);
+  it limits the window, not the spend.
 - `aiMaxToolResponseRounds`: Maximum number of tool-response continuation rounds allowed for one AI review request.
-  This applies when ON_DEMAND code context tools are enabled and defaults to 3.
+  This applies when ON_DEMAND code context tools are enabled and defaults to 3. Each round resends the whole
+  conversation. In this fork every tool result ends with the number of rounds left, and tool calls requested after the
+  last round are rejected with a request for the final answer (at most two more requests), so an exhausted budget still
+  produces a review.
+- `codeContextSearchScope` (fork): What the ON_DEMAND `grep` and `tree` tools cover. `CHANGED_FILES`, the default,
+  covers only the files changed by the patch set (and the `codeContextProject` repositories), as upstream.
+  `REPOSITORY` covers every file of the repository at the patch set: `grep` returns at most 30 matches, 3 per file,
+  with lines cut at 160 characters, searches at most 5000 files, skips binary, LFS, excluded file types and files above
+  512 KiB, and reports how many matches it left out; `tree` is no longer limited to the changed files. The tool
+  descriptions tell the model which scope applies. `get_content` can read any file in both scopes; binary files are
+  reported without content and text is cut at 64 KiB.
+- `aiReviewUsageInMessage` (fork): When `true`, the review message ends with one line listing the models, the number of
+  AI requests, the input and output tokens (thinking included) and the estimated cost of that review. A review group
+  reports it once. The default value is `false`.
 - `topicPatchSetWaitMs`: Time, in milliseconds, to wait when handling a Patch Set event for a change with a topic. This
   gives the plugin time to group related Patch Sets from the same topic and run an overall AI review. The default value
   is `3000` milliseconds.

@@ -28,6 +28,10 @@ the development build that includes features restricted to ReviewAI Administrato
 
 The generated JAR files are available under Gerrit's `bazel-bin/plugins/reviewai-gerrit-plugin/` directory.
 
+With Maven (fork), `mvn -Pdev package` builds the development variant: it compiles `src/dev/main/java` and sets
+`Gerrit-Module` to `DevModule`. Without `-Pdev` the production variant is built. The `src/dev` sources are compiled as
+test sources in both cases, so the tests always see a development build.
+
 Gerrit's Bazlets packaging populates `Implementation-Version` from the nearest annotated `v*` Git tag. Create release
 tags as annotated tags (for example, `git tag -a v4.1.0`); lightweight tags are ignored and the version falls back to
 the commit SHA.

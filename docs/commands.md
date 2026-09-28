@@ -37,7 +37,9 @@ requested action.
 
 ## Help
 
-Use `/help` to display a summary of all supported commands and their main options. Use `/help <command>` or
+Use `/help` to display a summary of the commands you can run and their main options. It leaves out commands that
+need the development build or a role you don't have (`/configure`, `/directives`, `/show`, `--debug`, and
+`/forget_thread` for non-moderators). Use `/help <command>` or
 `/help /<command>` to show detailed help for a single command.
 
 Example:

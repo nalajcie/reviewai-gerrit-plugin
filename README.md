@@ -15,13 +15,35 @@
 | `codeContextProject` | Read-only extra repositories (coding standards, shared headers, specifications) that the ON_DEMAND tools can browse under `reviewai-context/<project>/`. |
 | `aiBudgetDailyUsd`, `aiBudgetMonthlyUsd`, `aiBudgetProjectMonthlyUsd` | Budgets on the estimated cost: automatic reviews stop at 100 %, manual requests at 120 %. Admin endpoint `ai-usage` reports the spend. See [AI Budgets](docs/configuration.md#ai-budgets). |
 | telemetry | A `project` field on review-run and cost metrics, plus `ai_request/project_count`. See [telemetry](docs/telemetry.md). |
+| `codeContextSearchScope = REPOSITORY` | ON_DEMAND `grep` and `tree` cover the whole repository at the patch set instead of only the changed files, with bounded results; the tool descriptions state the scope. See [codeContextSearchScope](docs/configuration.md#optional-parameters). |
+| `aiReviewUsageInMessage` | Ends the review message with the review's models, number of AI requests, input/output tokens and estimated cost. |
+| tool budget | Every tool result tells the model how many tool rounds are left; calls past `aiMaxToolResponseRounds` are rejected with a request for the final answer, instead of ending the review without one. Always on. |
+| Review Agent action | "Review With Related Changes" runs `/review --topic`; its hover text shows the `maxReviewLines` limit. |
+| `/help` | Lists only the commands the user can run in this build and role. |
+| Maven dev build | `mvn -Pdev package` builds the development variant (`DevModule`: `/show`, `/directives`, `/configure`, `--debug`). |
 
 Bug fixes also in this fork, submitted upstream:
 
 - With `codeContextPolicy=NONE`, commit-message reviews dropped the first `directive`.
 - In `SPECIALIZED_AGENTS` mode, `directive` values didn't reach the reviewing agents.
 
-Build (Maven, production variant):
+Fixes kept in this fork for now (fork-specific code paths or not yet proposed upstream):
+
+- Gemini 3: tool rounds failed with "Function call is missing a thought_signature"; the Gemini client now keeps and
+  resends thought signatures (`returnThinking`, `sendThinking`).
+- Gemini 3 thinking tokens are billed as output but were not in the cost estimate (LangChain4j reports them only in the
+  total). The estimate now bills `total - input` as output, and each priced response is logged with its token usage.
+- Commit-message comments ended up at patch-set level: `/COMMIT_MSG` is now anchored in reviews (not only in suggest
+  mode), replies of the commit-message agent are pinned to the commit message (in a merged review group to the member
+  whose commit message they quote), and `COMMIT_MSG` without the slash is accepted.
+- `get_content` returned binary files as text (a 500 KB flash loader added 155k tokens to every later request) and did
+  not limit size; binary and LFS files are now reported without content and text is cut at 64 KB.
+- Group reviews used the comments of the last group member for the reviewed change ("Pending review feedback comment is
+  missing from Gerrit" on `/review --topic`).
+- Empty `grep`/`tree` results now say that they only cover the changed files, instead of `CONTEXT NOT PROVIDED`, which
+  made the model retry the same search.
+
+Build (Maven, production variant; add `-Pdev` for the development variant):
 
 ```bash
 docker run --rm -u $(id -u):$(id -g) -e MAVEN_CONFIG=/var/maven/.m2 -v $HOME/.m2:/var/maven/.m2 \
