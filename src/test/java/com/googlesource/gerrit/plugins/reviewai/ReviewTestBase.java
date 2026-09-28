@@ -69,6 +69,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.langchain.client.api.L
 import com.googlesource.gerrit.plugins.reviewai.aibackend.langchain.client.api.agents.level1.LangChainMultiAgentReviewClient;
 import com.googlesource.gerrit.plugins.reviewai.config.ConfigCreator;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.data.AiUsageStore;
 import com.googlesource.gerrit.plugins.reviewai.data.ChangeSetDataProvider;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandler;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandlerProvider;
@@ -362,6 +363,7 @@ public class ReviewTestBase extends TestBase {
                     bind(ClientCommandExtension.class).toInstance(getClientCommandExtension());
                     bind(GitRepositoryManager.class).toInstance(repositoryManager);
                     bind(ReviewAiMetrics.class).toInstance(new ReviewAiMetrics());
+                    bind(AiUsageStore.class).toInstance(getAiUsageStore());
                     bind(ReviewFeedbackPublisher.class).toInstance(reviewFeedbackPublisher);
                     bind(Path.class)
                         .annotatedWith(PluginData.class)
@@ -371,6 +373,10 @@ public class ReviewTestBase extends TestBase {
                 })
             .getInstance(EventHandlerTask.class);
     return task.execute();
+  }
+
+  protected AiUsageStore getAiUsageStore() {
+    return new AiUsageStore(getTestReviewAiDb());
   }
 
   protected AiRoleResolver getAiRoleResolver() {

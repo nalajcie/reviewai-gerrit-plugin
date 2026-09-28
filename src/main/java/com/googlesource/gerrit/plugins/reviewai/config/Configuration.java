@@ -32,7 +32,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.Callable;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class Configuration extends ConfigCore {
   // Config Constants
   public static final String DEFAULT_EMPTY_SETTING = "";
@@ -107,6 +109,8 @@ public class Configuration extends ConfigCore {
   private static final boolean DEFAULT_OLLAMA_THINK = false;
   private static final String DEFAULT_MOCK_AI_ADDRESS = DEFAULT_EMPTY_SETTING;
   private static final List<String> DEFAULT_SELECTIVE_LOG_LEVEL_OVERRIDE = new ArrayList<>();
+  // A budget of zero means "no limit".
+  private static final double DEFAULT_AI_BUDGET_USD = 0.0;
 
   // Config setting keys
   public static final String KEY_AI_SYSTEM_PROMPT_INSTRUCTIONS = "aiSystemPromptInstructions";
@@ -121,6 +125,9 @@ public class Configuration extends ConfigCore {
   public static final String KEY_MOCK_AI_ADDRESS = "mockAiAddress";
   public static final String KEY_AI_ADMINISTRATORS_GROUP = "aiAdministratorsGroup";
   public static final String KEY_AI_PRICING = "aiPricing";
+  public static final String KEY_AI_BUDGET_DAILY_USD = "aiBudgetDailyUsd";
+  public static final String KEY_AI_BUDGET_MONTHLY_USD = "aiBudgetMonthlyUsd";
+  public static final String KEY_AI_BUDGET_PROJECT_MONTHLY_USD = "aiBudgetProjectMonthlyUsd";
   public static final String KEY_AI_REVIEW_APPLICABLE_IF = "aiReviewApplicableIf";
   public static final String KEY_STORE_URL = "storeUrl";
   public static final String KEY_STORE_USERNAME = "storeUsername";
@@ -236,6 +243,27 @@ public class Configuration extends ConfigCore {
 
   public List<String> getAiPricing() {
     return splitListIntoItems(KEY_AI_PRICING, List.of());
+  }
+
+  /** Global-only daily budget, in USD, for the estimated AI cost of the whole site (0 = none). */
+  public double getAiBudgetDailyUsd() {
+    return parseBudget(
+        KEY_AI_BUDGET_DAILY_USD, globalConfig.getString(KEY_AI_BUDGET_DAILY_USD, null));
+  }
+
+  /** Global-only monthly budget, in USD, for the estimated AI cost of the whole site (0 = none). */
+  public double getAiBudgetMonthlyUsd() {
+    return parseBudget(
+        KEY_AI_BUDGET_MONTHLY_USD, globalConfig.getString(KEY_AI_BUDGET_MONTHLY_USD, null));
+  }
+
+  /**
+   * Monthly budget, in USD, for the estimated AI cost of one project (0 = none). Read with project
+   * inheritance, so it can be set on a parent project, and falls back to the global value.
+   */
+  public double getAiBudgetProjectMonthlyUsd() {
+    return parseBudget(
+        KEY_AI_BUDGET_PROJECT_MONTHLY_USD, getString(KEY_AI_BUDGET_PROJECT_MONTHLY_USD, null));
   }
 
   public AiModelRoute getSelectedAiModelRoute() {
@@ -511,6 +539,19 @@ public class Configuration extends ConfigCore {
 
   public TreeMap<String, String> dumpConfigMap() {
     return dumpConfigMap(this.getClass());
+  }
+
+  private static double parseBudget(String key, String value) {
+    if (value == null || value.isBlank()) {
+      return DEFAULT_AI_BUDGET_USD;
+    }
+    try {
+      double budget = Double.parseDouble(value.trim());
+      return Double.isFinite(budget) && budget > 0 ? budget : DEFAULT_AI_BUDGET_USD;
+    } catch (NumberFormatException e) {
+      log.warn("Ignoring invalid {} value `{}`: not a number", key, value);
+      return DEFAULT_AI_BUDGET_USD;
+    }
   }
 
   private int getIntAllowingProjectZero(String key, int defaultValue) {

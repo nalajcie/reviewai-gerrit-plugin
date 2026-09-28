@@ -521,6 +521,49 @@ plugins_reviewai_gerrit_plugin_reviewai_ai_request_latency_OPENAI_gpt_5_4_REVIEW
 increase(plugins_reviewai_gerrit_plugin_reviewai_review_run_count_total_total[1h]) == 0
 ```
 
+## AI Usage Endpoint
+
+The estimated cost is also stored in the ReviewAI database, aggregated by UTC day and project, for the
+[AI budgets](configuration.md#ai-budgets). Unlike the Gerrit metrics, these totals survive Gerrit restarts and plugin
+reloads. They are available from a REST endpoint:
+
+```text
+GET /config/server/reviewai-gerrit-plugin~ai-usage?period=day|month
+```
+
+`period` selects the current UTC day or the current UTC month; it defaults to `month`. Only ReviewAI administrators
+may call the endpoint: members of `aiAdministratorsGroup`, or Gerrit administrators when that group is not configured
+or not found. Other users get `403 Forbidden`.
+
+Example response (Gerrit prefixes JSON responses with `)]}'`):
+
+```json
+{
+  "period": "month",
+  "period_start": "2026-09",
+  "currency": "USD",
+  "total_usd": 3.75,
+  "total_nano_usd": 3750000000,
+  "limits": {
+    "daily_usd": 2.0,
+    "monthly_usd": 40.0,
+    "project_monthly_usd": 10.0,
+    "manual_overrun_factor": 1.2
+  },
+  "projects": [
+    {"project": "core", "usd": 3.5, "nano_usd": 3500000000, "monthly_limit_usd": 25.0},
+    {"project": "docs", "usd": 0.25, "nano_usd": 250000000, "monthly_limit_usd": 10.0}
+  ]
+}
+```
+
+- `total_*` and `projects[].usd`/`nano_usd` are the estimated spend in the selected period. Projects without spend in
+  the period are not listed. Cost that cannot be attributed to a project is listed as `unknown`.
+- `limits` are the global values from `gerrit.config`; `0` means no limit. `project_monthly_usd` is the global default
+  of `aiBudgetProjectMonthlyUsd`, and `projects[].monthly_limit_usd` is the value that applies to that project,
+  including inheritance.
+- `manual_overrun_factor` is how far manual requests may exceed a budget.
+
 ## Restart Behavior
 
 Gerrit metrics are in-memory. If Gerrit restarts, current counters and timer summaries reset to zero. Prometheus keeps

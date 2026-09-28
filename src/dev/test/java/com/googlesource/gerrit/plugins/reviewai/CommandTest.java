@@ -37,6 +37,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.commands
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.commands.ClientCommandParser;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.commands.DevClientCommandExtension;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration.AgentSpecializationLevel;
+import com.googlesource.gerrit.plugins.reviewai.data.AiUsageStore;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandler;
 import com.googlesource.gerrit.plugins.reviewai.data.PluginDataHandlerProvider;
 import com.googlesource.gerrit.plugins.reviewai.data.ReviewAgentRequestStatusStore;
@@ -636,6 +637,24 @@ public class CommandTest extends OpenAiLangChainReviewTestBase {
             .stripTrailing(),
         captor.getValue().message);
     Assert.assertFalse(captor.getValue().comments.isEmpty());
+  }
+
+  @Test
+  public void commandReviewIsRefusedWhenDailyBudgetIsExhaustedBeyondManualAllowance()
+      throws Exception {
+    when(globalConfig.getString(Mockito.eq("aiBudgetDailyUsd"), Mockito.any())).thenReturn("1");
+    new AiUsageStore(getTestReviewAiDb()).record("other-project", 1_200_000_000L);
+    setupCommandComment("/review");
+
+    handleEventBasedOnType(EventHandlerTask.SupportedEvents.COMMENT_ADDED);
+
+    ArgumentCaptor<ReviewInput> captor = ArgumentCaptor.forClass(ReviewInput.class);
+    Mockito.verify(revisionApiMock).review(captor.capture());
+    Assert.assertTrue(
+        captor.getValue().message,
+        captor.getValue().message.contains("The daily AI budget is exhausted"));
+    WireMock.verify(
+        0, WireMock.postRequestedFor(WireMock.urlEqualTo(OpenAiUriResourceLocator.responsesUri())));
   }
 
   @Test

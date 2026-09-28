@@ -35,13 +35,16 @@ import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.data.ReviewFeedbackPublisher;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.listener.IEventHandlerType;
 import com.googlesource.gerrit.plugins.reviewai.localization.Localizer;
+import com.googlesource.gerrit.plugins.reviewai.localization.SystemMessageFormatter;
 import com.googlesource.gerrit.plugins.reviewai.metrics.ReviewAiMetrics;
+import com.googlesource.gerrit.plugins.reviewai.metrics.cost.AiBudgetGuard;
 import com.googlesource.gerrit.plugins.reviewai.permissions.AiAction;
 import com.googlesource.gerrit.plugins.reviewai.permissions.AiRole;
 import com.googlesource.gerrit.plugins.reviewai.permissions.AiRolePolicy;
 import com.googlesource.gerrit.plugins.reviewai.permissions.AiRoleResolver;
 import com.googlesource.gerrit.plugins.reviewai.review.PatchSetReviewer;
 import com.googlesource.gerrit.plugins.reviewai.web.AiReviewPermission;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
@@ -87,6 +90,7 @@ public class EventHandlerTask implements Runnable {
   private final ReviewAiMetrics metrics;
   private final ReviewFeedbackPublisher reviewFeedbackPublisher;
   private final Localizer localizer;
+  private final AiBudgetGuard budgetGuard;
 
   private SupportedEvents processing_event_type;
   private IEventHandlerType eventHandlerType;
@@ -113,7 +117,8 @@ public class EventHandlerTask implements Runnable {
       ReviewGroupResolver reviewGroupResolver,
       ReviewAiMetrics metrics,
       ReviewFeedbackPublisher reviewFeedbackPublisher,
-      Localizer localizer) {
+      Localizer localizer,
+      AiBudgetGuard budgetGuard) {
     this.changeSetData = changeSetData;
     this.change = change;
     this.reviewer = reviewer;
@@ -130,6 +135,7 @@ public class EventHandlerTask implements Runnable {
     this.metrics = metrics;
     this.reviewFeedbackPublisher = reviewFeedbackPublisher;
     this.localizer = localizer;
+    this.budgetGuard = budgetGuard;
     log.debug("EventHandlerTask initialized for change ID: {}", change.getFullChangeId());
   }
 
@@ -170,6 +176,39 @@ public class EventHandlerTask implements Runnable {
       log.debug(
           "Preprocessing event not supported or failed for event type: {}", change.getEventType());
     }
+    String budgetRefusalMessage = null;
+    Optional<AiBudgetGuard.Exhausted> exhaustedBudget = checkBudget(decision);
+    if (exhaustedBudget.isPresent()) {
+      AiBudgetGuard.Exhausted exhausted = exhaustedBudget.get();
+      if (isAutomaticRequest()) {
+        log.info(
+            "Skipping automatic AI review of {}: {} AI budget exhausted ({} = {} USD, estimated"
+                + " spend {} USD)",
+            change.getFullChangeId(),
+            exhausted.budget(),
+            exhausted.configKey(),
+            formatUsd(exhausted.limitUsd()),
+            formatUsd(exhausted.spentUsd()));
+        decision = AiRequestIntakeDecision.ignored();
+      } else {
+        log.info(
+            "Refusing AI request on {}: {} AI budget exhausted beyond the manual allowance"
+                + " ({} = {} USD, estimated spend {} USD)",
+            change.getFullChangeId(),
+            exhausted.budget(),
+            exhausted.configKey(),
+            formatUsd(exhausted.limitUsd()),
+            formatUsd(exhausted.spentUsd()));
+        budgetRefusalMessage =
+            SystemMessageFormatter.getLocalizedWarningMessage(
+                localizer,
+                "message.ai.budget.exhausted",
+                exhausted.budget(),
+                formatUsd(exhausted.spentUsd()),
+                formatUsd(exhausted.limitUsd()));
+        decision = AiRequestIntakeDecision.direct();
+      }
+    }
     return new PreparedEventHandlerTask(
         decision,
         sourceEventId,
@@ -180,7 +219,28 @@ public class EventHandlerTask implements Runnable {
         administratorUser,
         pendingRequest,
         metrics,
-        localizer);
+        localizer,
+        budgetRefusalMessage);
+  }
+
+  private Optional<AiBudgetGuard.Exhausted> checkBudget(AiRequestIntakeDecision decision) {
+    if (budgetGuard == null
+        || decision.disposition() != AiRequestIntakeDecision.Disposition.PERSIST) {
+      return Optional.empty();
+    }
+    return budgetGuard.check(
+        config,
+        change.getProjectName(),
+        isAutomaticRequest() ? AiBudgetGuard.Origin.AUTOMATIC : AiBudgetGuard.Origin.MANUAL);
+  }
+
+  private boolean isAutomaticRequest() {
+    return change.getPatchSetEvent() instanceof PatchSetCreatedEvent
+        || Boolean.TRUE.equals(changeSetData.getDeferredReview());
+  }
+
+  private static String formatUsd(double usd) {
+    return String.format(Locale.ROOT, "%.2f", usd);
   }
 
   private boolean preProcessEvent() {

@@ -5,6 +5,9 @@ CONFIGURATION SETTINGS
 
 agentSpecializationLevel: SINGLE_AGENT
 aiAdministratorsGroup:
+aiBudgetDailyUsd: 0.0
+aiBudgetMonthlyUsd: 0.0
+aiBudgetProjectMonthlyUsd: 0.0
 aiCommentTemperature: 1.0
 aiConnectionMaxRetryAttempts: 1
 aiConnectionTimeout: 180

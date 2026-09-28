@@ -165,6 +165,7 @@ public class ReviewAiDb {
     initReviewFeedbackSchema();
     initAiRequestSchema();
     initReviewAgentConversationSchema();
+    initAiUsageSchema();
     executeSchema(
         "CREATE TABLE IF NOT EXISTS db_versions ("
             + "version INT PRIMARY KEY"
@@ -312,6 +313,18 @@ public class ReviewAiDb {
             + ", active_request_id VARCHAR(255)"
             + ", updated_at_millis BIGINT NOT NULL DEFAULT 0"
             + ", PRIMARY KEY(gerrit_instance_id, change_number)"
+            + ")");
+  }
+
+  /** Estimated AI cost, aggregated per UTC day and project, for budgets and usage reports. */
+  public void initAiUsageSchema() throws SQLException {
+    executeSchema(
+        "CREATE TABLE IF NOT EXISTS ai_usage_costs ("
+            + "usage_day VARCHAR(10) NOT NULL"
+            + ", project VARCHAR(512) NOT NULL"
+            + ", cost_nano_usd BIGINT NOT NULL DEFAULT 0"
+            + ", updated_at_millis BIGINT NOT NULL DEFAULT 0"
+            + ", PRIMARY KEY(usage_day, project)"
             + ")");
   }
 

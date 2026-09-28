@@ -191,6 +191,39 @@ project entry is applied last and takes precedence. Ollama and mock routes are e
 [Telemetry](telemetry.md#cost-calculation) for the built-in catalog, calculation rules, and exported cost
 metrics.
 
+## AI Budgets
+
+Optional budgets cap the estimated AI cost. They use the same estimate as the cost telemetry, so they only count
+provider/model routes with known pricing (built-in or `aiPricing`); Ollama and mock routes cost nothing. All values are
+in USD. A budget that is unset or `0` has no limit, which is the default.
+
+```ini
+[plugin "reviewai-gerrit-plugin"]
+    aiBudgetDailyUsd = 20
+    aiBudgetMonthlyUsd = 300
+    aiBudgetProjectMonthlyUsd = 50
+```
+
+- `aiBudgetDailyUsd`: Global-only budget for the whole site per UTC day. Read only from `gerrit.config`.
+- `aiBudgetMonthlyUsd`: Global-only budget for the whole site per UTC calendar month. Read only from `gerrit.config`.
+- `aiBudgetProjectMonthlyUsd`: Budget per project and UTC calendar month. It is read with project inheritance, so it
+  can be set once on a parent project (for example, `All-Projects` or a shared parent) and overridden by a child
+  project. A value in `gerrit.config` is the default for projects that do not set one.
+
+The estimated cost of every AI response is stored in the ReviewAI database (H2 or the shared PostgreSQL storage),
+aggregated by UTC day and project, so the spend survives plugin reloads and Gerrit restarts.
+
+When a budget is exhausted:
+
+- Automatic reviews (new patch sets and deferred reviews) are skipped from 100 % of the budget. The plugin logs one
+  `INFO` line naming the budget, its configured value and the estimated spend.
+- Manual requests (`/review` and other commands addressed to the AI, and Review Agent chat) are still allowed up to
+  120 % of the budget. Above that, the AI is not called and a short warning is posted to the change instead.
+
+Budgets are checked before a request starts, so a single large request can take the spend above the budget. The
+estimate is not an invoice; see [Telemetry](telemetry.md#cost-calculation). Administrators can read the current spend
+from the [usage endpoint](telemetry.md#ai-usage-endpoint).
+
 ## Conditional AI Review Trigger
 
 `aiReviewApplicableIf` delays automatic AI review until a Gerrit submit-requirement expression matches the change.
@@ -259,6 +292,8 @@ Patch Set or label-vote event rather than immediately.
   If unset or not found in the expanded `aiModels` list, the first available provider/model route is used.
 - `aiPricing`: Repeatable exact provider/model pricing override used by estimated-cost telemetry. See
   [AI Pricing Overrides](#ai-pricing-overrides).
+- `aiBudgetDailyUsd`, `aiBudgetMonthlyUsd`, `aiBudgetProjectMonthlyUsd`: Optional estimated-cost budgets in USD. See
+  [AI Budgets](#ai-budgets).
 - `aiTokens`: Provides provider tokens. Configure these as `OpenAI/{token}`, `DeepSeek/{token}`,
   `MoonShot/{token}`, and so on. Ollama does not require a token.
 - `aiDomain`: Defines the base endpoint for the selected provider. By default, it uses the provider’s standard domain:

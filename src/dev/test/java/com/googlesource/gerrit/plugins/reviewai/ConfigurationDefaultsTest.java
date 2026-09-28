@@ -59,6 +59,67 @@ public class ConfigurationDefaultsTest {
   }
 
   @Test
+  public void shouldDefaultAiBudgetsToUnlimitedWhenUnset() {
+    Configuration configuration = createConfiguration();
+
+    assertEquals(0.0, configuration.getAiBudgetDailyUsd(), 0.0);
+    assertEquals(0.0, configuration.getAiBudgetMonthlyUsd(), 0.0);
+    assertEquals(0.0, configuration.getAiBudgetProjectMonthlyUsd(), 0.0);
+  }
+
+  @Test
+  public void shouldReadGlobalAiBudgetsOnlyFromGerritConfig() {
+    Config global = new Config();
+    global.setString("plugin", PLUGIN_NAME, "aiBudgetDailyUsd", "5");
+    global.setString("plugin", PLUGIN_NAME, "aiBudgetMonthlyUsd", "100.5");
+    Config project = new Config();
+    project.setString("plugin", PLUGIN_NAME, "aiBudgetDailyUsd", "1000");
+    project.setString("plugin", PLUGIN_NAME, "aiBudgetMonthlyUsd", "1000");
+    Configuration configuration =
+        createConfiguration(
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, global),
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, project));
+
+    assertEquals(5.0, configuration.getAiBudgetDailyUsd(), 0.0);
+    assertEquals(100.5, configuration.getAiBudgetMonthlyUsd(), 0.0);
+  }
+
+  @Test
+  public void shouldReadProjectAiBudgetFromProjectBeforeGlobal() {
+    Config global = new Config();
+    global.setString("plugin", PLUGIN_NAME, "aiBudgetProjectMonthlyUsd", "20");
+    Config project = new Config();
+    project.setString("plugin", PLUGIN_NAME, "aiBudgetProjectMonthlyUsd", "7.5");
+
+    assertEquals(
+        20.0,
+        createConfiguration(
+                PluginConfig.createFromGerritConfig(PLUGIN_NAME, global), emptyPluginConfig())
+            .getAiBudgetProjectMonthlyUsd(),
+        0.0);
+    assertEquals(
+        7.5,
+        createConfiguration(
+                PluginConfig.createFromGerritConfig(PLUGIN_NAME, global),
+                PluginConfig.createFromGerritConfig(PLUGIN_NAME, project))
+            .getAiBudgetProjectMonthlyUsd(),
+        0.0);
+  }
+
+  @Test
+  public void shouldTreatInvalidOrNegativeAiBudgetsAsUnlimited() {
+    Config global = new Config();
+    global.setString("plugin", PLUGIN_NAME, "aiBudgetDailyUsd", "ten");
+    global.setString("plugin", PLUGIN_NAME, "aiBudgetMonthlyUsd", "-3");
+    Configuration configuration =
+        createConfiguration(
+            PluginConfig.createFromGerritConfig(PLUGIN_NAME, global), emptyPluginConfig());
+
+    assertEquals(0.0, configuration.getAiBudgetDailyUsd(), 0.0);
+    assertEquals(0.0, configuration.getAiBudgetMonthlyUsd(), 0.0);
+  }
+
+  @Test
   public void shouldDefaultDisabledFileExtensionsToEmptyWhenUnset() {
     Configuration configuration = createConfiguration();
 

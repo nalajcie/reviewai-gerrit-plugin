@@ -42,6 +42,7 @@ final class PreparedEventHandlerTask {
   private final ReviewAgentEventRequestStatusUpdater.PendingRequest pendingRequest;
   private final ReviewAiMetrics metrics;
   private final Localizer localizer;
+  private final String budgetRefusalMessage;
 
   PreparedEventHandlerTask(
       AiRequestIntakeDecision decision,
@@ -54,6 +55,36 @@ final class PreparedEventHandlerTask {
       ReviewAgentEventRequestStatusUpdater.PendingRequest pendingRequest,
       ReviewAiMetrics metrics,
       Localizer localizer) {
+    this(
+        decision,
+        sourceEventId,
+        eventHandlerType,
+        change,
+        changeSetData,
+        reviewer,
+        administratorUser,
+        pendingRequest,
+        metrics,
+        localizer,
+        null);
+  }
+
+  /**
+   * @param budgetRefusalMessage when set, the request is not sent to the AI; this message is posted
+   *     to the user instead, because an AI budget is exhausted
+   */
+  PreparedEventHandlerTask(
+      AiRequestIntakeDecision decision,
+      String sourceEventId,
+      IEventHandlerType eventHandlerType,
+      GerritChange change,
+      ChangeSetData changeSetData,
+      PatchSetReviewer reviewer,
+      boolean administratorUser,
+      ReviewAgentEventRequestStatusUpdater.PendingRequest pendingRequest,
+      ReviewAiMetrics metrics,
+      Localizer localizer,
+      String budgetRefusalMessage) {
     this.decision = decision;
     this.sourceEventId = sourceEventId;
     this.eventHandlerType = eventHandlerType;
@@ -64,6 +95,7 @@ final class PreparedEventHandlerTask {
     this.pendingRequest = pendingRequest;
     this.metrics = metrics;
     this.localizer = localizer;
+    this.budgetRefusalMessage = budgetRefusalMessage;
   }
 
   AiRequestIntakeDecision decision() {
@@ -75,13 +107,20 @@ final class PreparedEventHandlerTask {
   }
 
   Result execute() {
+    if (budgetRefusalMessage != null) {
+      return refuse(budgetRefusalMessage);
+    }
     return execute(eventHandlerType::processEvent);
   }
 
   Result reject() {
-    changeSetData.setReviewSystemMessage(
+    return refuse(
         SystemMessageFormatter.getLocalizedWarningMessage(
             localizer, "message.ai.request.in.progress"));
+  }
+
+  private Result refuse(String systemMessage) {
+    changeSetData.setReviewSystemMessage(systemMessage);
     return execute(() -> reviewer.review(change, administratorUser));
   }
 

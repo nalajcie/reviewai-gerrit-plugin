@@ -28,6 +28,7 @@ import com.google.gerrit.server.logging.Metadata;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ReviewAssistantStage;
+import com.googlesource.gerrit.plugins.reviewai.data.AiUsageStore;
 import com.googlesource.gerrit.plugins.reviewai.utils.TimeUtils;
 import java.util.concurrent.TimeUnit;
 
@@ -42,6 +43,7 @@ public class ReviewAiMetrics {
   private final Timer3<String, String, String> aiRequestLatency;
   private final Counter3<String, String, String> aiEstimatedCostNanoUsd;
   private final Counter2<String, String> aiPricingMissing;
+  private volatile AiUsageStore usageStore;
 
   @Inject
   public ReviewAiMetrics(MetricMaker metricMaker) {
@@ -140,6 +142,15 @@ public class ReviewAiMetrics {
     aiPricingMissing = null;
   }
 
+  /**
+   * Persists every estimated cost recorded here, per UTC day and project, for AI budgets and the
+   * usage report. Optional so that metrics keep working where no ReviewAI database is available.
+   */
+  @Inject(optional = true)
+  public void setUsageStore(AiUsageStore usageStore) {
+    this.usageStore = usageStore;
+  }
+
   public MetricTimer startReviewRun(String eventType) {
     return startReviewRun(eventType, null);
   }
@@ -194,6 +205,10 @@ public class ReviewAiMetrics {
       String provider, String model, String project, long nanoUsd) {
     if (aiEstimatedCostNanoUsd != null) {
       aiEstimatedCostNanoUsd.incrementBy(label(provider), label(model), label(project), nanoUsd);
+    }
+    AiUsageStore store = usageStore;
+    if (store != null) {
+      store.record(project, nanoUsd);
     }
   }
 

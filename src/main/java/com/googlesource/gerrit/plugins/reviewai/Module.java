@@ -23,6 +23,7 @@ import com.google.gerrit.extensions.restapi.RestApiModule;
 import com.google.gerrit.lifecycle.LifecycleModule;
 import com.google.gerrit.server.avatar.AvatarProvider;
 import com.google.gerrit.server.change.ChangeResource;
+import com.google.gerrit.server.config.ConfigResource;
 import com.google.gerrit.server.config.PluginConfigFactory;
 import com.google.inject.Inject;
 import com.google.inject.Provides;
@@ -41,6 +42,7 @@ import com.googlesource.gerrit.plugins.reviewai.web.AiReviewHistory;
 import com.googlesource.gerrit.plugins.reviewai.web.AiReviewMessage;
 import com.googlesource.gerrit.plugins.reviewai.web.AiReviewMessageStatus;
 import com.googlesource.gerrit.plugins.reviewai.web.AiReviewThreads;
+import com.googlesource.gerrit.plugins.reviewai.web.AiUsage;
 import com.googlesource.gerrit.plugins.reviewai.web.ReviewAgentConversations;
 import com.googlesource.gerrit.plugins.reviewai.web.ReviewAgentModel;
 import java.io.IOException;
@@ -85,6 +87,7 @@ public class Module extends LifecycleModule {
                 .to(AiReviewMessageStatus.class);
             post(ChangeResource.CHANGE_KIND, "ai-review-agent-conversations")
                 .to(ReviewAgentConversations.class);
+            get(ConfigResource.CONFIG_KIND, "ai-usage").to(AiUsage.class);
           }
         });
   }
