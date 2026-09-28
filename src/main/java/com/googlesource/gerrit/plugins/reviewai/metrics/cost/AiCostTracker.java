@@ -21,6 +21,7 @@ import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.metrics.ReviewAiMetrics;
 import com.googlesource.gerrit.plugins.reviewai.settings.AiProviderType;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.output.TokenUsage;
 import java.util.Optional;
 import java.util.OptionalLong;
 import lombok.extern.slf4j.Slf4j;
@@ -63,6 +64,15 @@ public final class AiCostTracker {
       OptionalLong nanoUsd =
           AiCostCalculator.calculateNanoUsd(pricing.get(), response.tokenUsage());
       if (nanoUsd.isPresent()) {
+        TokenUsage usage = response.tokenUsage();
+        log.info(
+            "AI usage for {} ({}): input={}, output={}, total={} tokens, estimated cost {} nanoUSD",
+            route,
+            project,
+            usage.inputTokenCount(),
+            usage.outputTokenCount(),
+            usage.totalTokenCount(),
+            nanoUsd.getAsLong());
         metrics.recordAiEstimatedCostNanoUsd(
             route.providerRoute(), route.model(), project, nanoUsd.getAsLong());
       } else {

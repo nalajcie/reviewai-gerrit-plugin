@@ -138,6 +138,19 @@ public class AiCostCalculatorTest {
     assertFalse(catalog.find(route(AiProviderType.OLLAMA, "llama3.2")).isPresent());
   }
 
+  @Test
+  public void billsGeminiThinkingTokensAsOutput() {
+    ModelPricing pricing =
+        new AiPricingCatalog(
+                List.of("Gemini/gemini-3.8-flash,input=0.75,cachedInput=0.075,output=3.75"))
+            .find(route(AiProviderType.GEMINI, "gemini-3.8-flash"))
+            .orElseThrow();
+    // 1000 prompt tokens, 100 answer tokens, 500 thinking tokens only in the total
+    TokenUsage usage = new TokenUsage(1000, 100, 1600);
+
+    assertEquals(3_000_000L, AiCostCalculator.calculateNanoUsd(pricing, usage).orElseThrow());
+  }
+
   private static ModelPricing pricing(AiProviderType provider, String model) {
     return new AiPricingCatalog(List.of()).find(route(provider, model)).orElseThrow();
   }

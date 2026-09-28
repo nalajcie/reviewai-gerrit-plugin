@@ -32,6 +32,12 @@ final class AiTokenUsageNormalizer {
 
     long inputTokens = nonNegative(tokenUsage.inputTokenCount());
     long outputTokens = nonNegative(tokenUsage.outputTokenCount());
+    // Gemini reports the thinking tokens only in the total (LangChain4j maps candidatesTokenCount
+    // to the output count and drops thoughtsTokenCount), but bills them as output. Other
+    // providers' totals are input + output, so this changes nothing for them.
+    if (tokenUsage.totalTokenCount() != null) {
+      outputTokens = Math.max(outputTokens, nonNegative(tokenUsage.totalTokenCount()) - inputTokens);
+    }
     long cachedTokens = 0;
     long cacheWriteTokens = 0;
     if (tokenUsage instanceof DetailedTokenUsage detailedTokenUsage) {
