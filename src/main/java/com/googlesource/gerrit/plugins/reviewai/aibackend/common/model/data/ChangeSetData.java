@@ -70,6 +70,10 @@ public class ChangeSetData {
   // Review group members of a multi-project review, keyed by the filename prefix that identifies
   // them in the merged patch and in on-demand code context tool paths.
   private transient Map<String, GerritChange> reviewGroupChangesByPrefix = Map.of();
+  // Set on the review pass the suggest client runs to collect issues: their filenames decide how
+  // they are split into code and commit-message suggestions, so they are left as the model wrote
+  // them.
+  private transient boolean suggestionReviewPass;
   // Review group summary prepended to the patch when only the triggering change is reviewed.
   private transient String reviewGroupHeader;
   // Read-only repositories exposed to the on-demand code context tools, resolved once per review.
@@ -177,6 +181,7 @@ public class ChangeSetData {
     copy.setAiRequestCancellation(aiRequestCancellation);
     copy.setReviewGroupChangesByPrefix(reviewGroupChangesByPrefix);
     copy.setReviewGroupHeader(reviewGroupHeader);
+    copy.setSuggestionReviewPass(suggestionReviewPass);
     copy.setCodeContextProjects(codeContextProjects);
     copy.setForcedReview(forcedReview);
     copy.setForcedTopicReview(forcedTopicReview);

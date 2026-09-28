@@ -148,6 +148,84 @@ public class GerritClientPatchSetReviewAiTest extends TestBase {
   }
 
   @Test
+  public void getPatchSetAddsCommitMessageAnchorWithoutAddingItToTheFiles() throws Exception {
+    GerritClientPatchSetReviewAi client = mixedExtensionClient(true);
+    FileApi commitMessageApi = org.mockito.Mockito.mock(FileApi.class);
+    when(revisionApi.file("/COMMIT_MSG")).thenReturn(commitMessageApi);
+    DiffInfo commitMessageDiff = new DiffInfo();
+    DiffInfo.ContentEntry entry = new DiffInfo.ContentEntry();
+    entry.b =
+        new ArrayList<>(
+            List.of(
+            "Parent:     1234567 (base)",
+            "Author:     A <a@example.com>",
+            "AuthorDate: 2026-09-28 10:00:00 +0200",
+            "Commit:     A <a@example.com>",
+            "CommitDate: 2026-09-28 10:00:00 +0200",
+            "",
+            "fix: update the board",
+            "",
+            "Change-Id: I0123"));
+    commitMessageDiff.content = new ArrayList<>(List.of(entry));
+    when(commitMessageApi.diff(0)).thenReturn(commitMessageDiff);
+
+    client.getPatchSet(new ChangeSetData(1), mixedExtensionChange());
+
+    Assert.assertEquals(List.of("allowed.py"), client.getPatchSetFiles());
+    Assert.assertTrue(client.getFileDiffsProcessed().containsKey("/COMMIT_MSG"));
+    Assert.assertEquals(
+        7,
+        client.getFileDiffsProcessed().get("/COMMIT_MSG").getCommitMessageRange().orElseThrow()
+            .getStartLine());
+  }
+
+  @Test
+  public void getPatchSetHasNoCommitMessageAnchorWhenCommitMessagesAreNotReviewed()
+      throws Exception {
+    GerritClientPatchSetReviewAi client = mixedExtensionClient(false);
+
+    client.getPatchSet(new ChangeSetData(1), mixedExtensionChange());
+
+    Assert.assertFalse(client.getFileDiffsProcessed().containsKey("/COMMIT_MSG"));
+    verify(revisionApi, never()).file("/COMMIT_MSG");
+  }
+
+  @Test
+  public void getPatchSetKeepsGoingWhenTheCommitMessageCannotBeRead() throws Exception {
+    GerritClientPatchSetReviewAi client = mixedExtensionClient(true);
+    when(revisionApi.file("/COMMIT_MSG")).thenThrow(new RuntimeException("gone"));
+
+    String patchSet = client.getPatchSet(new ChangeSetData(1), mixedExtensionChange());
+
+    Assert.assertTrue(patchSet.contains("diff --git a/allowed.py b/allowed.py"));
+    Assert.assertFalse(client.getFileDiffsProcessed().containsKey("/COMMIT_MSG"));
+  }
+
+  private GerritClientPatchSetReviewAi mixedExtensionClient(boolean reviewCommitMessages)
+      throws Exception {
+    when(config.getGerritApi()).thenReturn(gerritApi);
+    when(gerritApi.changes()).thenReturn(changes);
+    when(changes.id(PROJECT_NAME.get(), BRANCH_NAME.shortName(), CHANGE_ID.get()))
+        .thenReturn(changeApi);
+    when(changeApi.revision("revision-3")).thenReturn(revisionApi);
+    when(revisionApi.patch()).thenReturn(BinaryResult.create(getMixedExtensionPatch()));
+    when(config.getAiReviewCommitMessages()).thenReturn(reviewCommitMessages);
+    when(config.getEnabledFileExtensions()).thenReturn(List.of("py", "txt"));
+    when(config.getDisabledFileExtensions()).thenReturn(List.of("txt"));
+    when(revisionApi.file("allowed.py")).thenReturn(fileApi);
+    DiffInfo diffInfo = new DiffInfo();
+    diffInfo.content = new ArrayList<>();
+    when(fileApi.diff(0)).thenReturn(diffInfo);
+    return new GerritClientPatchSetReviewAi(config);
+  }
+
+  private GerritChange mixedExtensionChange() {
+    GerritChange change = getGerritChange();
+    change.setPatchSetRevision("revision-3");
+    return change;
+  }
+
+  @Test
   public void getIncrementalPatchSetUsesPreviousPatchSetAsBase() throws Exception {
     List<RevCommit> patchSetCommits = createIncrementalPatchSetCommits();
     when(config.getGerritApi()).thenReturn(gerritApi);

@@ -114,6 +114,52 @@ public class LangChainMultiAgentReviewClientTest {
   }
 
   @Test
+  public void commitMessageAgentRepliesArePinnedToTheCommitMessage() throws Exception {
+    RecordingLangChainMultiAgentReviewClient client =
+        new RecordingLangChainMultiAgentReviewClient();
+    ChangeSetData changeSetData = new ChangeSetData(1);
+    changeSetData.setForcedReview(true);
+    GerritChange change = mock(GerritChange.class);
+    when(change.getIsCommentEvent()).thenReturn(true);
+    when(change.getFullChangeId()).thenReturn("change~1");
+
+    AiResponseContent response = client.ask(changeSetData, change, "patch");
+
+    assertEquals(
+        List.of("a.py", "/COMMIT_MSG"),
+        response.getReplies().stream().map(AiReplyItem::getFilename).toList());
+  }
+
+  @Test
+  public void automaticReviewPinsCommitMessageAgentRepliesOnly() throws Exception {
+    RecordingLangChainMultiAgentReviewClient client =
+        new RecordingLangChainMultiAgentReviewClient();
+    GerritChange change = mock(GerritChange.class);
+    when(change.getIsCommentEvent()).thenReturn(false);
+    when(change.getFullChangeId()).thenReturn("change~1");
+
+    AiResponseContent response = client.ask(new ChangeSetData(1), change, "patch");
+
+    assertEquals(
+        java.util.Arrays.asList(null, "/COMMIT_MSG"),
+        response.getReplies().stream().map(AiReplyItem::getFilename).toList());
+  }
+
+  @Test
+  public void chatRepliesOfTheCommitMessageAgentKeepTheirFilename() throws Exception {
+    RecordingLangChainMultiAgentReviewClient client =
+        new RecordingLangChainMultiAgentReviewClient();
+    client.routedStage = ReviewAssistantStage.REVIEW_COMMIT_MESSAGE;
+    GerritChange change = mock(GerritChange.class);
+    when(change.getIsCommentEvent()).thenReturn(true);
+    when(change.getFullChangeId()).thenReturn("change~1");
+
+    AiResponseContent response = client.ask(new ChangeSetData(1), change, "patch");
+
+    assertNull(response.getReplies().getFirst().getFilename());
+  }
+
+  @Test
   public void followUpRunsSerialConcernPairsForEachScopedReviewer() throws Exception {
     ConcernRecordingLangChainMultiAgentReviewClient client =
         new ConcernRecordingLangChainMultiAgentReviewClient();

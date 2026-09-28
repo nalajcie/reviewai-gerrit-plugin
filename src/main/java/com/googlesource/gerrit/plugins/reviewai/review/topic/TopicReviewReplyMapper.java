@@ -31,8 +31,10 @@ public class TopicReviewReplyMapper {
     if (!filename.startsWith(topicFilenamePrefix)) {
       return Optional.empty();
     }
+    String memberFilename = filename.substring(topicFilenamePrefix.length());
     return Optional.of(
-        copyWithFilename(replyItem, filename.substring(topicFilenamePrefix.length())));
+        copyWithFilename(
+            replyItem, "COMMIT_MSG".equals(memberFilename) ? "/COMMIT_MSG" : memberFilename));
   }
 
   private AiReplyItem copyWithFilename(AiReplyItem replyItem, String filename) {

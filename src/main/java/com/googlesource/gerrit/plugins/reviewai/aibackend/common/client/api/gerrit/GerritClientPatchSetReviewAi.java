@@ -90,6 +90,10 @@ public class GerritClientPatchSetReviewAi extends GerritClientPatchSet
     }
     log.debug("Files extracted from patch: {}", patchSetFiles);
     retrieveFileDiff(change, revisionBase);
+    if (config.getAiReviewCommitMessages()
+        && changeSetData.getReviewScope() != ReviewScope.PATCHSET) {
+      retrieveCommitMessageDiff(change, revisionBase);
+    }
 
     return formattedPatch;
   }

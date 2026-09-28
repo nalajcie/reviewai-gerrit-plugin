@@ -279,9 +279,23 @@ public class LangChainMultiAgentReviewClient extends LangChainClient implements 
     List<AiResponseContent> aiResponseContents = new ArrayList<>();
     ReviewRequestResult latestReviewRequest = null;
     try {
-      for (CompletableFuture<ReviewRequestResult> reviewRequestFuture : reviewRequestFutures) {
-        ReviewRequestResult reviewRequestResult = reviewRequestFuture.join();
+      for (int i = 0; i < reviewRequestFutures.size(); i++) {
+        ReviewRequestResult reviewRequestResult = reviewRequestFutures.get(i).join();
         latestReviewRequest = reviewRequestResult;
+        // Only reviews publish commit-message comments; chat replies and suggestions keep the
+        // filenames they were given.
+        boolean review =
+            !Boolean.TRUE.equals(change.getIsCommentEvent())
+                || Boolean.TRUE.equals(changeSetData.getForcedReview());
+        if (assistantStages.get(i) == ReviewAssistantStage.REVIEW_COMMIT_MESSAGE
+            && review
+            && !changeSetData.getSuggestMode()
+            && !changeSetData.isSuggestionReviewPass()) {
+          CommitMessageReplies.pin(
+              reviewRequestResult.getResponseContent(),
+              change,
+              changeSetData.getReviewGroupChangesByPrefix());
+        }
         aiResponseContents.add(reviewRequestResult.getResponseContent());
       }
     } catch (CompletionException e) {

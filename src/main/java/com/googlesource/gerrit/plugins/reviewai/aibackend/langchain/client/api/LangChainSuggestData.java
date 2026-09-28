@@ -27,6 +27,7 @@ final class LangChainSuggestData {
     ChangeSetData reviewData = changeSetData.copy();
     reviewData.setForcedReview(true);
     reviewData.setSuggestMode(false);
+    reviewData.setSuggestionReviewPass(true);
     ReviewScope scope = changeSetData.getReviewScope();
     if (scope == ReviewScope.PATCHSET || scope == ReviewScope.COMMIT_MESSAGE) {
       reviewData.setForcedStagedReview(true);

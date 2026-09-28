@@ -42,6 +42,7 @@ public class GerritClientPatchSet extends GerritClientAccount {
   @Getter protected Integer revisionBase = 0;
   @Getter protected List<String> patchSetFiles;
 
+  protected static final String COMMIT_MESSAGE_PATH = "/COMMIT_MSG";
   private boolean isCommitMessage;
 
   public GerritClientPatchSet(Configuration config) {
@@ -106,9 +107,29 @@ public class GerritClientPatchSet extends GerritClientAccount {
     }
   }
 
-  private void processFileDiff(String filename, DiffInfo diff) {
-    log.debug("Processing file diff for filename: {}", filename);
+  /**
+   * Adds the commit message to {@code fileDiffsProcessed}, without adding it to the patch files or
+   * the prompt diffs, so that replies about it can be anchored to it.
+   */
+  protected void retrieveCommitMessageDiff(GerritChange change, int revisionBase) {
+    if (fileDiffsProcessed.containsKey(COMMIT_MESSAGE_PATH)) {
+      return;
+    }
+    try (ManualRequestContext ignored = config.openRequestContext()) {
+      var revisionApi = change.getRevisionApi(change.getChangeApi(config));
+      DiffInfo diff = revisionApi.file(COMMIT_MESSAGE_PATH).diff(revisionBase);
+      fileDiffsProcessed.put(
+          COMMIT_MESSAGE_PATH, new FileDiffProcessed(config, true, toPatchSetFileDiff(diff)));
+    } catch (Exception e) {
+      log.warn(
+          "Could not retrieve the commit message of change {}; its comments stay at patch-set"
+              + " level",
+          change.getFullChangeId(),
+          e);
+    }
+  }
 
+  private static GerritPatchSetFileDiff toPatchSetFileDiff(DiffInfo diff) {
     GerritPatchSetFileDiff gerritPatchSetFileDiff = new GerritPatchSetFileDiff();
     Optional.ofNullable(diff.metaA)
         .ifPresent(meta -> gerritPatchSetFileDiff.setMetaA(toMeta(meta)));
@@ -119,6 +140,13 @@ public class GerritClientPatchSet extends GerritClientAccount {
             content ->
                 gerritPatchSetFileDiff.setContent(
                     content.stream().map(GerritClientPatchSet::toContent).collect(toList())));
+    return gerritPatchSetFileDiff;
+  }
+
+  private void processFileDiff(String filename, DiffInfo diff) {
+    log.debug("Processing file diff for filename: {}", filename);
+
+    GerritPatchSetFileDiff gerritPatchSetFileDiff = toPatchSetFileDiff(diff);
 
     // Initialize the reduced file diff for the Gerrit review with fields `meta_a` and `meta_b`
     GerritReviewFileDiff gerritReviewFileDiff =
