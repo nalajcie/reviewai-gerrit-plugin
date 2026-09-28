@@ -25,6 +25,7 @@ import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.langchain.provider.ILangChainProvider;
 import dev.langchain4j.model.TokenCountEstimator;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.googleai.GeminiThinkingConfig;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
@@ -45,21 +46,40 @@ public class GeminiLangChainProvider implements ILangChainProvider {
       endpoint = GEMINI_DOMAIN;
     }
 
-    ChatModel model =
-        GoogleAiGeminiChatModel.builder()
-            .apiKey(config.getAiToken())
-            .modelName(config.getAiModel())
-            .temperature(temperature)
-            .timeout(Duration.ofSeconds(config.getAiConnectionTimeout()))
-            .maxRetries(LANGCHAIN_MAX_RETRIES)
-            // Gemini 3 rejects a tool round whose function call comes back without the
-            // thought_signature it was sent with. LangChain4j keeps the signature only with
-            // returnThinking and sends it back only with sendThinking.
-            .returnThinking(true)
-            .sendThinking(true)
-            .build();
+    ChatModel model = modelBuilder(config, temperature).build();
+    // Gemini 3 thinks at MEDIUM by default; asked for the final answer after its tool budget, it
+    // spent 10k thinking tokens on another tool call. LOW is the lowest level all Gemini 3 models
+    // accept (3.7/3.8 Flash reject MINIMAL).
+    ChatModel finalAnswerModel =
+        supportsThinkingLevel(config.getAiModel())
+            ? modelBuilder(config, temperature)
+                .thinkingConfig(
+                    GeminiThinkingConfig.builder()
+                        .thinkingLevel(GeminiThinkingConfig.GeminiThinkingLevel.LOW)
+                        .build())
+                .build()
+            : null;
 
-    return new LangChainProvider(model, endpoint);
+    return new LangChainProvider(model, endpoint, finalAnswerModel);
+  }
+
+  private static GoogleAiGeminiChatModel.GoogleAiGeminiChatModelBuilder modelBuilder(
+      Configuration config, double temperature) {
+    return GoogleAiGeminiChatModel.builder()
+        .apiKey(config.getAiToken())
+        .modelName(config.getAiModel())
+        .temperature(temperature)
+        .timeout(Duration.ofSeconds(config.getAiConnectionTimeout()))
+        .maxRetries(LANGCHAIN_MAX_RETRIES)
+        // Gemini 3 rejects a tool round whose function call comes back without the
+        // thought_signature it was sent with. LangChain4j keeps the signature only with
+        // returnThinking and sends it back only with sendThinking.
+        .returnThinking(true)
+        .sendThinking(true);
+  }
+
+  static boolean supportsThinkingLevel(String model) {
+    return model != null && model.startsWith("gemini-3");
   }
 
   @Override

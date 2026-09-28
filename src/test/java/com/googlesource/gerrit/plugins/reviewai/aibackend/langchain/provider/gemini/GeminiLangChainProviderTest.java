@@ -1,6 +1,8 @@
 package com.googlesource.gerrit.plugins.reviewai.aibackend.langchain.provider.gemini;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.when;
 
@@ -9,6 +11,8 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.langchain.provider.Fal
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.langchain.provider.ILangChainProvider;
 import dev.langchain4j.model.TokenCountEstimator;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.googleai.GeminiThinkingConfig;
 import java.lang.reflect.Field;
 import java.util.Optional;
 import org.junit.Before;
@@ -69,6 +73,42 @@ public class GeminiLangChainProviderTest {
 
     assertEquals(Boolean.TRUE, getModelField(langChainProvider, "returnThinking"));
     assertEquals(Boolean.TRUE, getModelField(langChainProvider, "sendThinking"));
+  }
+
+  @Test
+  public void buildsALowThinkingModelForFinalAnswersOfGemini3() throws Exception {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiDomain()).thenReturn(Configuration.GEMINI_DOMAIN);
+    when(config.getAiToken()).thenReturn("dummy-token");
+    when(config.getAiModel()).thenReturn("gemini-3.8-flash");
+    when(config.getAiConnectionTimeout()).thenReturn(180);
+
+    LangChainProvider langChainProvider = provider.buildChatModel(config, 1.0);
+
+    ChatModel finalAnswerModel = langChainProvider.getFinalAnswerModel();
+    assertNotNull(finalAnswerModel);
+    GeminiThinkingConfig thinking =
+        (GeminiThinkingConfig) getField(finalAnswerModel, "thinkingConfig");
+    assertTrue("low".equalsIgnoreCase(thinking.thinkingLevel()));
+    assertEquals(Boolean.TRUE, getField(finalAnswerModel, "sendThinking"));
+    assertNull(getField(langChainProvider.getModel(), "thinkingConfig"));
+  }
+
+  @Test
+  public void hasNoFinalAnswerModelBeforeGemini3() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiDomain()).thenReturn(Configuration.GEMINI_DOMAIN);
+    when(config.getAiToken()).thenReturn("dummy-token");
+    when(config.getAiModel()).thenReturn("gemini-2.5-flash");
+    when(config.getAiConnectionTimeout()).thenReturn(180);
+
+    assertNull(provider.buildChatModel(config, 1.0).getFinalAnswerModel());
+  }
+
+  private static Object getField(ChatModel model, String name) throws Exception {
+    Field field = model.getClass().getSuperclass().getDeclaredField(name);
+    field.setAccessible(true);
+    return field.get(model);
   }
 
   private static Object getModelField(LangChainProvider langChainProvider, String name)

@@ -22,6 +22,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.con
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.AiRequestCancellation;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.errors.exceptions.AiRequestSupersededException;
 import com.googlesource.gerrit.plugins.reviewai.logging.LogArg;
 import com.googlesource.gerrit.plugins.reviewai.metrics.cost.AiCostTracker;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -29,6 +30,7 @@ import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -45,7 +47,19 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class LangChainExecutor {
 
-  static final int MAX_FINAL_ANSWER_ATTEMPTS = 2;
+  // Rounds that answer late tool calls with a rejection, keeping the conversation.
+  static final int MAX_FINAL_ANSWER_ATTEMPTS = 1;
+  // Fresh requests without tools that carry the tool results as text, after the rejection round
+  // did not produce an answer (more tool calls or an empty reply).
+  static final int MAX_DIGEST_ATTEMPTS = 2;
+  static final int DIGEST_MAX_RESULT_CHARS = 20_000;
+  static final int DIGEST_MAX_TOTAL_CHARS = 150_000;
+  static final int LOGGED_ANSWER_MAX_CHARS = 300;
+  static final String DIGEST_INSTRUCTION =
+      "[ReviewAI: the tool budget is used up and tools are no longer available. Below are the"
+          + " results of the lookups you made. Do not ask for more context. Return your final"
+          + " answer now, in the required format, based on the review request above and these"
+          + " results.]";
   static final String TOOL_BUDGET_NOTE =
       "[ReviewAI tool budget: round %d of %d used, %d left. Request all the lookups you still"
           + " need in one round; answer as soon as you have enough context.]";
@@ -70,6 +84,19 @@ class LangChainExecutor {
 
   AiMessage execute(
       ChatModel model, GerritChange change, ChangeSetData changeSetData, ChatMemory memory) {
+    return execute(model, null, change, changeSetData, memory);
+  }
+
+  /**
+   * @param finalAnswerModel the same model set up to answer quickly, for the requests that ask for
+   *     the final answer after the tool budget; null uses {@code model}
+   */
+  AiMessage execute(
+      ChatModel model,
+      ChatModel finalAnswerModel,
+      GerritChange change,
+      ChangeSetData changeSetData,
+      ChatMemory memory) {
     AiRequestCancellation cancellation = changeSetData.getAiRequestCancellation();
     cancellation.throwIfSupersessionRequested();
     log.debug(
@@ -80,6 +107,8 @@ class LangChainExecutor {
         getToolNames(),
         structuredResponseFormat != null);
     List<ChatMessage> requestMessages = new ArrayList<>(memory.messages());
+    List<ChatMessage> initialMessages = List.copyOf(requestMessages);
+    List<String> toolTranscript = new ArrayList<>();
     ChatRequest initialRequest = buildChatRequest(requestMessages, getInitialToolChoice());
     log.debug("Sending initial LangChain chat request: {}", LogArg.truncated(initialRequest));
     ChatResponse response = AiModelRequestLimiter.chat(config, model, initialRequest);
@@ -114,6 +143,7 @@ class LangChainExecutor {
             request.id(),
             request.name(),
             output != null ? output.length() : 0);
+        toolTranscript.add(transcriptEntry(request, output));
         ToolExecutionResultMessage toolResult = ToolExecutionResultMessage.from(request, output);
         requestMessages.add(toolResult);
         memory.add(toolResult);
@@ -139,6 +169,7 @@ class LangChainExecutor {
 
     // Models don't always honour ToolChoice.NONE (Gemini 3 kept calling tools). Reject the calls
     // with an explicit tool result and ask for the final answer, instead of ending with nothing.
+    ChatModel answerModel = finalAnswerModel != null ? finalAnswerModel : model;
     int finalAnswerAttempts = 0;
     while (aiMessage != null
         && aiMessage.hasToolExecutionRequests()
@@ -161,11 +192,34 @@ class LangChainExecutor {
         memory.add(rejection);
       }
       response =
-          AiModelRequestLimiter.chat(
-              config, model, buildChatRequest(requestMessages, ToolChoice.NONE));
+          chatForAnswer(model, answerModel, buildChatRequest(requestMessages, ToolChoice.NONE));
       recordCost(response, change, changeSetData);
       aiMessage = response != null ? response.aiMessage() : null;
       logAiMessageToolRequests("final-answer-" + finalAnswerAttempts, aiMessage);
+    }
+
+    // Still no answer: start over without tools and without the function-call history (which
+    // needs thought signatures and invites more calls), giving the tool results as text. A review
+    // that used up its tool budget is otherwise paid for and lost.
+    int digestAttempts = 0;
+    while (needsFinalAnswer(aiMessage, iteration) && digestAttempts < MAX_DIGEST_ATTEMPTS) {
+      digestAttempts++;
+      log.info(
+          "No final answer after {} tool rounds ({}); asking without tools, with {} tool results"
+              + " as text (attempt {} of {})",
+          iteration,
+          aiMessage.hasToolExecutionRequests() ? "tool calls pending" : "empty reply",
+          toolTranscript.size(),
+          digestAttempts,
+          MAX_DIGEST_ATTEMPTS);
+      response =
+          chatForAnswer(model, answerModel, buildDigestRequest(initialMessages, toolTranscript));
+      recordCost(response, change, changeSetData);
+      aiMessage = response != null ? response.aiMessage() : null;
+      logAiMessageToolRequests("digest-answer-" + digestAttempts, aiMessage);
+    }
+    if (iteration > 0) {
+      logFinalAnswer(iteration, aiMessage);
     }
 
     if (aiMessage != null && aiMessage.hasToolExecutionRequests()) {
@@ -181,6 +235,72 @@ class LangChainExecutor {
         aiMessage != null,
         aiMessage != null && aiMessage.hasToolExecutionRequests());
     return aiMessage;
+  }
+
+  /** Sends a final-answer request to the quick model, falling back to the review model. */
+  private ChatResponse chatForAnswer(ChatModel model, ChatModel answerModel, ChatRequest request) {
+    if (answerModel == model) {
+      return AiModelRequestLimiter.chat(config, model, request);
+    }
+    try {
+      return AiModelRequestLimiter.chat(config, answerModel, request);
+    } catch (AiRequestSupersededException e) {
+      throw e;
+    } catch (RuntimeException e) {
+      log.warn(
+          "Final-answer request with the quick-answer model failed, retrying with the review"
+              + " model: {}",
+          e.getMessage());
+      return AiModelRequestLimiter.chat(config, model, request);
+    }
+  }
+
+  /** A reply after tool rounds that is no answer: more tool calls, or no text at all. */
+  private static boolean needsFinalAnswer(AiMessage aiMessage, int toolRounds) {
+    if (aiMessage == null || toolRounds == 0) {
+      return false;
+    }
+    return aiMessage.hasToolExecutionRequests()
+        || aiMessage.text() == null
+        || aiMessage.text().isBlank();
+  }
+
+  private static String transcriptEntry(ToolExecutionRequest request, String output) {
+    String text = output == null ? "" : output;
+    if (text.length() > DIGEST_MAX_RESULT_CHARS) {
+      text = text.substring(0, DIGEST_MAX_RESULT_CHARS) + "\n[... cut]";
+    }
+    return "### " + request.name() + " " + request.arguments() + "\n" + text;
+  }
+
+  /** The original request plus one user message with the tool results, and no tools. */
+  static ChatRequest buildDigestRequest(List<ChatMessage> initialMessages, List<String> transcript) {
+    StringBuilder digest = new StringBuilder(DIGEST_INSTRUCTION);
+    int omitted = 0;
+    for (String entry : transcript) {
+      if (digest.length() + entry.length() > DIGEST_MAX_TOTAL_CHARS) {
+        omitted++;
+        continue;
+      }
+      digest.append("\n\n").append(entry);
+    }
+    if (omitted > 0) {
+      digest.append("\n\n[").append(omitted).append(" more tool results omitted for size.]");
+    }
+    List<ChatMessage> messages = new ArrayList<>(initialMessages);
+    messages.add(UserMessage.from(digest.toString()));
+    return ChatRequest.builder().messages(messages).build();
+  }
+
+  private static void logFinalAnswer(int toolRounds, AiMessage aiMessage) {
+    String text = aiMessage == null ? null : aiMessage.text();
+    if (text == null) {
+      log.info("Final answer after {} tool rounds: none", toolRounds);
+    } else if (text.length() <= LOGGED_ANSWER_MAX_CHARS) {
+      log.info("Final answer after {} tool rounds: {}", toolRounds, text);
+    } else {
+      log.info("Final answer after {} tool rounds: {} characters", toolRounds, text.length());
+    }
   }
 
   static String withToolBudgetNote(String output, int round, int maxRounds) {

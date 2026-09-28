@@ -210,7 +210,8 @@ public class LangChainExecutorTest {
             AiMessage.from(List.of(toolRequest("call_1"))),
             AiMessage.from(List.of(toolRequest("call_2"))),
             AiMessage.from(List.of(toolRequest("call_3"))),
-            AiMessage.from(List.of(toolRequest("call_4"))));
+            AiMessage.from(List.of(toolRequest("call_4"))),
+            AiMessage.from(List.of(toolRequest("call_5"))));
 
     AiMessage result =
         new LangChainExecutor(
@@ -218,7 +219,131 @@ public class LangChainExecutorTest {
             .execute(model, change, memory());
 
     assertTrue(result.hasToolExecutionRequests());
-    assertEquals(2 + LangChainExecutor.MAX_FINAL_ANSWER_ATTEMPTS, model.requests.size());
+    assertEquals(
+        2 + LangChainExecutor.MAX_FINAL_ANSWER_ATTEMPTS + LangChainExecutor.MAX_DIGEST_ATTEMPTS,
+        model.requests.size());
+  }
+
+  @Test
+  public void asksWithoutToolsAndWithTheToolResultsWhenTheRejectionRoundCallsToolsAgain() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiMaxToolResponseRounds()).thenReturn(1);
+    GerritChange change = Mockito.mock(GerritChange.class);
+    when(change.getFullChangeId()).thenReturn("project~branch~change");
+    GitRepoFiles gitRepoFiles = Mockito.mock(GitRepoFiles.class);
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null)).thenReturn(List.of());
+    RecordingChatModel model =
+        new RecordingChatModel(
+            AiMessage.from(List.of(toolRequest("call_1"))),
+            AiMessage.from(List.of(toolRequest("call_2"))));
+    RecordingChatModel answerModel =
+        new RecordingChatModel(
+            AiMessage.from(List.of(toolRequest("call_3"))), AiMessage.from("done"));
+
+    AiMessage result =
+        new LangChainExecutor(
+                config, null, List.of(treeToolSpecification()), true, gitRepoFiles, null)
+            .execute(model, answerModel, change, new ChangeSetData(0), memory());
+
+    assertEquals("done", result.text());
+    assertEquals(2, model.requests.size());
+    // the rejection round and the digest go to the quick-answer model
+    assertEquals(2, answerModel.requests.size());
+    assertTrue(toolResultText(answerModel.requests.get(0).messages(), "call_2").startsWith("REJECTED"));
+    ChatRequest digest = answerModel.requests.get(1);
+    assertTrue(digest.toolSpecifications() == null || digest.toolSpecifications().isEmpty());
+    assertTrue(digest.messages().stream().noneMatch(ToolExecutionResultMessage.class::isInstance));
+    assertEquals(UserMessage.from("review"), digest.messages().getFirst());
+    String digestText = ((UserMessage) digest.messages().getLast()).singleText();
+    assertTrue(digestText.startsWith(LangChainExecutor.DIGEST_INSTRUCTION));
+    assertTrue(digestText.contains("### tree {}"));
+  }
+
+  @Test
+  public void fallsBackToTheReviewModelWhenTheQuickModelFails() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiMaxToolResponseRounds()).thenReturn(1);
+    GerritChange change = Mockito.mock(GerritChange.class);
+    when(change.getFullChangeId()).thenReturn("project~branch~change");
+    GitRepoFiles gitRepoFiles = Mockito.mock(GitRepoFiles.class);
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null)).thenReturn(List.of());
+    RecordingChatModel model =
+        new RecordingChatModel(
+            AiMessage.from(List.of(toolRequest("call_1"))),
+            AiMessage.from(List.of(toolRequest("call_2"))),
+            AiMessage.from("done"));
+    ChatModel failingModel =
+        new ChatModel() {
+          @Override
+          public ChatResponse chat(ChatRequest request) {
+            throw new IllegalArgumentException("thinking level not supported");
+          }
+        };
+
+    AiMessage result =
+        new LangChainExecutor(
+                config, null, List.of(treeToolSpecification()), true, gitRepoFiles, null)
+            .execute(model, failingModel, change, new ChangeSetData(0), memory());
+
+    assertEquals("done", result.text());
+    assertEquals(3, model.requests.size());
+  }
+
+  @Test
+  public void asksAgainWhenTheReplyAfterToolRoundsIsEmpty() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiMaxToolResponseRounds()).thenReturn(5);
+    GerritChange change = Mockito.mock(GerritChange.class);
+    when(change.getFullChangeId()).thenReturn("project~branch~change");
+    GitRepoFiles gitRepoFiles = Mockito.mock(GitRepoFiles.class);
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null)).thenReturn(List.of());
+    RecordingChatModel model =
+        new RecordingChatModel(
+            AiMessage.from(List.of(toolRequest("call_1"))),
+            AiMessage.from(" "),
+            AiMessage.from("done"));
+
+    AiMessage result =
+        new LangChainExecutor(
+                config, null, List.of(treeToolSpecification()), true, gitRepoFiles, null)
+            .execute(model, change, memory());
+
+    assertEquals("done", result.text());
+    assertEquals(3, model.requests.size());
+    assertTrue(
+        ((UserMessage) model.requests.get(2).messages().getLast())
+            .singleText()
+            .startsWith(LangChainExecutor.DIGEST_INSTRUCTION));
+  }
+
+  @Test
+  public void keepsAnEmptyReplyWithoutToolRounds() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiMaxToolResponseRounds()).thenReturn(5);
+    RecordingChatModel model = new RecordingChatModel(AiMessage.from(" "));
+
+    AiMessage result =
+        new LangChainExecutor(config, null, List.of(treeToolSpecification()), true, null, null)
+            .execute(model, Mockito.mock(GerritChange.class), memory());
+
+    assertEquals(" ", result.text());
+    assertEquals(1, model.requests.size());
+  }
+
+  @Test
+  public void digestCutsLargeToolResults() {
+    String large = "x".repeat(LangChainExecutor.DIGEST_MAX_TOTAL_CHARS);
+    List<String> transcript = new ArrayList<>();
+    for (int i = 0; i < 10; i++) {
+      transcript.add("### grep {}\n" + large.substring(0, LangChainExecutor.DIGEST_MAX_RESULT_CHARS));
+    }
+
+    ChatRequest digest =
+        LangChainExecutor.buildDigestRequest(List.of(UserMessage.from("review")), transcript);
+
+    String text = ((UserMessage) digest.messages().getLast()).singleText();
+    assertTrue(text.length() <= LangChainExecutor.DIGEST_MAX_TOTAL_CHARS + 100);
+    assertTrue(text.endsWith("more tool results omitted for size.]"));
   }
 
   private static ChatMemory memory() {

@@ -25,4 +25,11 @@ import lombok.Data;
 public class LangChainProvider {
   private ChatModel model;
   private String endpoint;
+  // The same model set up to answer quickly (less thinking), for the requests that ask for the
+  // final answer after the tool budget is used up; null when the provider has no such setting.
+  private ChatModel finalAnswerModel;
+
+  public LangChainProvider(ChatModel model, String endpoint) {
+    this(model, endpoint, null);
+  }
 }

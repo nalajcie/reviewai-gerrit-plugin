@@ -619,7 +619,8 @@ public class LangChainClient extends AiClientBase implements IAiClient {
 
       AiMessage ai =
           (rebuildToolExecutor ? buildToolExecutor(changeSetData) : getToolExecutor(changeSetData))
-              .execute(model, change, changeSetData, memory);
+              .execute(
+                  model, providerModel.getFinalAnswerModel(), change, changeSetData, memory);
       String responseText = ai != null ? ai.text() : null;
 
       if (responseText == null) {
