@@ -1,5 +1,36 @@
 # AI Code Review Gerrit Plugin
 
+> **This is a fork** of [amarula/reviewai-gerrit-plugin](https://github.com/amarula/reviewai-gerrit-plugin),
+> maintained by Phoenix Systems for its Gerrit. Branch `phoesys/main` is upstream `main` plus the changes below.
+> Bug fixes go upstream as pull requests; the features are kept here. Every addition is off by default, so with no
+> new settings the plugin behaves like upstream.
+
+## Fork additions
+
+| Setting | What it adds |
+|---|---|
+| `commitMessageDirective` | Mandatory rules that apply only to the commit-message review, so code reviewers don't report them against code. |
+| `aiProjectInstructionsInReviews` | Adds the target branch's `.gerrit/ai-instructions.md` to patch-set reviews, not only to chat replies. |
+| `topicReviewScope = SUBMITTED_TOGETHER` | Reviews everything Gerrit submits together (a topic across repositories, e.g. a superproject gitlink bump and its submodule changes) as one review, with per-repository path prefixes and readable submodule updates. See [Multi-Project Review Groups](docs/configuration.md#multi-project-review-groups). |
+| `codeContextProject` | Read-only extra repositories (coding standards, shared headers, specifications) that the ON_DEMAND tools can browse under `reviewai-context/<project>/`. |
+| `aiBudgetDailyUsd`, `aiBudgetMonthlyUsd`, `aiBudgetProjectMonthlyUsd` | Budgets on the estimated cost: automatic reviews stop at 100 %, manual requests at 120 %. Admin endpoint `ai-usage` reports the spend. See [AI Budgets](docs/configuration.md#ai-budgets). |
+| telemetry | A `project` field on review-run and cost metrics, plus `ai_request/project_count`. See [telemetry](docs/telemetry.md). |
+
+Bug fixes also in this fork, submitted upstream:
+
+- With `codeContextPolicy=NONE`, commit-message reviews dropped the first `directive`.
+- In `SPECIALIZED_AGENTS` mode, `directive` values didn't reach the reviewing agents.
+
+Build (Maven, production variant):
+
+```bash
+docker run --rm -u $(id -u):$(id -g) -e MAVEN_CONFIG=/var/maven/.m2 -v $HOME/.m2:/var/maven/.m2 \
+  -v "$PWD":/src -w /src maven:3.9.9-eclipse-temurin-21 \
+  mvn -B -Duser.home=/var/maven -Dmaven.repo.local=/var/maven/.m2/repository -DGerrit-ApiVersion=3.14.2 clean package
+```
+
+---
+
 ## Features
 
 This plugin adds ReviewAI support to Gerrit through the Review Agent sidebar, giving users a standard chatbot interface
