@@ -18,6 +18,8 @@
         <pmd.version>3.26.0</pmd.version>
         <spotbugs.version>4.8.6.6</spotbugs.version>
         <frontend-maven.version>1.15.0</frontend-maven.version>
+        <plugin.module>com.googlesource.gerrit.plugins.reviewai.Module</plugin.module>
+        <plugin.title>AI Code Review Gerrit Plugin</plugin.title>
     </properties>
 
     <distributionManagement>
@@ -160,7 +162,7 @@
                     <archive>
                         <manifestEntries>
                             <Gerrit-PluginName>reviewai-gerrit-plugin</Gerrit-PluginName>
-                            <Gerrit-Module>com.googlesource.gerrit.plugins.reviewai.Module</Gerrit-Module>
+                            <Gerrit-Module>${plugin.module}</Gerrit-Module>
                             <Gerrit-HttpModule>com.googlesource.gerrit.plugins.reviewai.HttpModule</Gerrit-HttpModule>
 
                             <Implementation-Vendor>Amarula Solutions</Implementation-Vendor>
@@ -168,7 +170,7 @@
                                 https://github.com/amarula/reviewai-gerrit-plugin
                             </Implementation-URL>
 
-                            <Implementation-Title>AI Code Review Gerrit Plugin</Implementation-Title>
+                            <Implementation-Title>${plugin.title}</Implementation-Title>
                             <Implementation-Version>${project.version}</Implementation-Version>
 
                             <Gerrit-ApiType>${Gerrit-ApiType}</Gerrit-ApiType>
@@ -260,13 +262,13 @@
                                         implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <manifestEntries>
                                         <Gerrit-PluginName>reviewai-gerrit-plugin</Gerrit-PluginName>
-                                        <Gerrit-Module>com.googlesource.gerrit.plugins.reviewai.Module</Gerrit-Module>
+                                        <Gerrit-Module>${plugin.module}</Gerrit-Module>
                                         <Gerrit-HttpModule>com.googlesource.gerrit.plugins.reviewai.HttpModule</Gerrit-HttpModule>
                                         <Implementation-Vendor>Amarula Solutions</Implementation-Vendor>
                                         <Implementation-URL>
                                             https://github.com/amarula/reviewai-gerrit-plugin
                                         </Implementation-URL>
-                                        <Implementation-Title>AI Code Review Gerrit Plugin</Implementation-Title>
+                                        <Implementation-Title>${plugin.title}</Implementation-Title>
                                         <Implementation-Version>${project.version}</Implementation-Version>
                                         <Gerrit-ApiType>${Gerrit-ApiType}</Gerrit-ApiType>
                                         <Gerrit-ApiVersion>${Gerrit-ApiVersion}</Gerrit-ApiVersion>
@@ -450,4 +452,45 @@
             </plugin>
         </plugins>
     </reporting>
+    <profiles>
+        <!-- mvn -Pdev package: the Maven counterpart of Bazel's reviewai-gerrit-plugin-dev. Adds
+             src/dev (DevModule: /show, /directives, /configure, review debug, log overrides). -->
+        <profile>
+            <id>dev</id>
+            <properties>
+                <plugin.module>com.googlesource.gerrit.plugins.reviewai.DevModule</plugin.module>
+                <plugin.title>AI Code Review Gerrit Plugin Dev</plugin.title>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>add-dev-main-source</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>src/dev/main/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>add-dev-test-source</id>
+                                <configuration>
+                                    <sources>
+                                        <source>src/dev/test/java</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
