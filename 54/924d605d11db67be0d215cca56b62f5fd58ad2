@@ -1,0 +1,27 @@
+README.md
+  s_87eb29ce0b3b15::t_20e6405c552026 20,23
+src/main/resources/static/reviewai/reviewAgent/reviewAgent.js
+  s_87eb29ce0b3b15::t_764dcc2379b236 59-73,78,85-86,162-185,187-219
+src/main/resources/static/reviewai/reviewAgent/reviewAgentConversationTurns.js
+  s_87eb29ce0b3b15::t_9e9295afe2a0a5 10,23-25
+src/main/resources/static/reviewai/reviewAgent/reviewAgentConversations.js
+  s_87eb29ce0b3b15::t_76cb11e1f36e41 20-28
+src/main/resources/static/reviewai/reviewAgent/reviewAgentUtils.js
+  s_87eb29ce0b3b15::t_f6c98891df63de 5-6,11-15,50-67,361-364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "54924d605d11db67be0d215cca56b62f5fd58ad2",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
