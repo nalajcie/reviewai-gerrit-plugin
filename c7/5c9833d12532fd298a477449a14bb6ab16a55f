@@ -1,0 +1,21 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/patch/comment/GerritCommentRange.java
+  s_87eb29ce0b3b15::t_6339ef33b7ac8f 58-59,63-66
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/patch/comment/GerritCommentRangeTest.java
+  s_87eb29ce0b3b15::t_2060b75e168afa 1-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c75c9833d12532fd298a477449a14bb6ab16a55f",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
