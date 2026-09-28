@@ -57,7 +57,8 @@ public class ReviewAgentModel implements RestReadView<ChangeResource> {
         new Output(
             models.stream().map(Model::fromRoute).toList(),
             getDefaultModelId(config, models),
-            aiReviewPermission.canAiReview(resource)));
+            aiReviewPermission.canAiReview(resource),
+            config.getMaxReviewLines()));
   }
 
   private String getDefaultModelId(Configuration config, List<String> models) {
@@ -78,11 +79,15 @@ public class ReviewAgentModel implements RestReadView<ChangeResource> {
     public final List<Model> models;
     public final String defaultModelId;
     public final Boolean canAiReview;
+    // Shown in the panel: review groups above this size are reviewed as the single change only.
+    public final Integer maxReviewLines;
 
-    public Output(List<Model> models, String defaultModelId, Boolean canAiReview) {
+    public Output(
+        List<Model> models, String defaultModelId, Boolean canAiReview, Integer maxReviewLines) {
       this.models = models;
       this.defaultModelId = defaultModelId;
       this.canAiReview = canAiReview;
+      this.maxReviewLines = maxReviewLines;
     }
   }
 

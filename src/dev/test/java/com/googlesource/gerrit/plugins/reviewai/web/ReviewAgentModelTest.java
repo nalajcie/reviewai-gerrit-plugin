@@ -86,8 +86,11 @@ public class ReviewAgentModelTest extends TestBase {
         .thenReturn(List.of("OpenAI/gpt-4.1", "MoonShot/moonshot-v1-8k"));
     when(config.getSelectedAiModelRoute())
         .thenReturn(new AiModelRoute(AiProviderType.OPENAI, "gpt-4.1"));
+    when(config.getMaxReviewLines()).thenReturn(3000);
 
     Response<ReviewAgentModel.Output> response = view.apply(changeResource);
+
+    assertEquals(Integer.valueOf(3000), response.value().maxReviewLines);
 
     assertEquals("OpenAI/gpt-4.1", response.value().defaultModelId);
     assertEquals(2, response.value().models.size());

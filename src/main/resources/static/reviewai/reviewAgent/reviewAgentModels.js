@@ -28,25 +28,29 @@
           (modelInfo && (modelInfo.default_model_id || modelInfo.defaultModelId)) ||
           (models[0] && models[0].model_id) ||
           null,
-        custom_actions: this._actions(),
+        custom_actions: this._actions(modelInfo),
       };
     },
 
     async getActions(change) {
+      let modelInfo = null;
       if (change && agentUtils.getChangeNumber(change)) {
-        const modelInfo = await this._fetchModelInfo(change);
+        modelInfo = await this._fetchModelInfo(change);
         if (!agentUtils.canAiReview(modelInfo)) {
           return agentUtils.emptyActionsResponse();
         }
       }
 
       return {
-        actions: this._actions(),
+        actions: this._actions(modelInfo),
         default_action_id: agentUtils.defaultActionId,
       };
     },
 
-    _actions() {
+    _actions(modelInfo) {
+      const maxReviewLines =
+        modelInfo && (modelInfo.max_review_lines || modelInfo.maxReviewLines);
+      const limit = maxReviewLines ? `${maxReviewLines} patch lines` : 'the configured line limit';
       return [
         {
           id: 'review-change',
@@ -54,6 +58,16 @@
           hover_text: 'Run /review for the full change',
           enable_send_without_input: true,
           initial_user_prompt: '/review',
+        },
+        {
+          id: 'review-topic',
+          display_text: 'Review With Related Changes',
+          hover_text:
+            'Run /review --topic: review this change together with the changes submitted ' +
+            'with it (relation chain and topic, across repositories). Above ' +
+            `${limit} in total, only this change is reviewed, with the others listed as context.`,
+          enable_send_without_input: true,
+          initial_user_prompt: '/review --topic',
         },
         {
           id: 'review-patchset',
