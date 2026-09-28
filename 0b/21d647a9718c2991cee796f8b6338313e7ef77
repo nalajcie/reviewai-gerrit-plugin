@@ -1,0 +1,25 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/code/context/ondemand/OnDemandCodeContextTools.java
+  s_87eb29ce0b3b15::t_701944e6b2cf85 49-58,204,294
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutor.java
+  s_87eb29ce0b3b15::t_49377d1ccd04b6 48-59,107-111,140-170,186-193
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/code/context/ondemand/OnDemandCodeContextToolsTest.java
+  s_87eb29ce0b3b15::t_b09d6a29ce5bc8 159-176
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutorTest.java
+  s_87eb29ce0b3b15::t_6fbefb666a2347 171-243,305-306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0b21d647a9718c2991cee796f8b6338313e7ef77",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
