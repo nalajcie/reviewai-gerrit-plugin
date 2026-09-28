@@ -339,6 +339,19 @@ directive = End each reply with \"Hope this helps!\"
 
 **NOTE**: Double quotes need to be escaped in directives content.
 
+- `commitMessageDirective`: Mandatory rules, like `directive`, that apply only to the review of the commit message.
+  They are added to the commit message review requirement of the unified `SINGLE_AGENT` prompt, the `SCOPED_AGENTS`
+  commit-message agent and the `SPECIALIZED_AGENTS` `COMMIT_MESSAGE` agent, and are left out of every Patch Set code
+  prompt, so rules such as subject length or required trailers are not reported against code. They have no effect when
+  `aiReviewCommitMessages` is false. As with `directive`, the values from `gerrit.config` and from the project
+  configuration are combined; within the project hierarchy, the nearest project that sets the key replaces the values
+  of its parents.
+
+```
+commitMessageDirective = "Subject: 'module: summary', at most 72 characters, no trailing period."
+commitMessageDirective = "A ticket trailer (for example Bug: 123) is required."
+```
+
 - `enabledFileExtensions`: This limits the reviewed files to the given types. Default file extensions are "py, java, js,
   ts, html, css, cs, cpp, c, h, php, rb, swift, kt, r, jl, go, scala, pl, pm, rs, dart, lua, sh, vb, bat".
 
