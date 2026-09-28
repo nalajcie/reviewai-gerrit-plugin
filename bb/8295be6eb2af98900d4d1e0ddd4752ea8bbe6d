@@ -1,0 +1,23 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/metrics/cost/AiCostTracker.java
+  s_87eb29ce0b3b15::t_85a71413cbd914 24,67-75
+src/main/java/com/googlesource/gerrit/plugins/reviewai/metrics/cost/AiTokenUsageNormalizer.java
+  s_87eb29ce0b3b15::t_699b5783f7a37e 35-40
+src/test/java/com/googlesource/gerrit/plugins/reviewai/metrics/cost/AiCostCalculatorTest.java
+  s_87eb29ce0b3b15::t_e23e97d54fdbec 141-153
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bb8295be6eb2af98900d4d1e0ddd4752ea8bbe6d",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
