@@ -1,0 +1,29 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainClient.java
+  s_87eb29ce0b3b15::t_bb5cc8e756cd3f 622-623
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutor.java
+  s_87eb29ce0b3b15::t_aad07421fba1d3 25,33,50-62,87-99,110-111,146,172,195,201-224,240-305
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/model/LangChainProvider.java
+  s_87eb29ce0b3b15::t_6956870bae9013 28-34
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/provider/gemini/GeminiLangChainProvider.java
+  s_87eb29ce0b3b15::t_fdd71a70e0eed1 28,49-61,63-82
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutorTest.java
+  s_87eb29ce0b3b15::t_8d1b5268a46dd1 213-214,222-346
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/provider/gemini/GeminiLangChainProviderTest.java
+  s_87eb29ce0b3b15::t_bda484c6574b2f 4-5,14-15,78-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "84e34938a83abef1e4a9d62d380a4021bf4145dd",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
