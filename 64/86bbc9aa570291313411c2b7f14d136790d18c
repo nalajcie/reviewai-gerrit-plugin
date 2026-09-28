@@ -1,0 +1,19 @@
+pom.xml
+  s_87eb29ce0b3b15::t_d373ead73691cc 21-22,165,173,265,271,455-495
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6486bbc9aa570291313411c2b7f14d136790d18c",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
