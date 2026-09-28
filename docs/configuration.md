@@ -368,6 +368,11 @@ commitMessageDirective = "A ticket trailer (for example Bug: 123) is required."
 - `filterCommentsRelevanceThreshold`: Any review comment assigned a relevance score by AI below this threshold will not
   be shown. The default threshold is set at 0.6.
 - `aiRelevanceRules`: This option allows customization of the rules AI uses to determine the relevance of a task.
+- `aiProjectInstructionsInReviews`: Disabled by default (false). The file `.gerrit/ai-instructions.md` at the tip of
+  the target branch is always added to the prompts that answer comments and requests. When this option is enabled, it
+  is also added, as a separate "Project Instructions" section, to every prompt that reviews a Patch Set: the unified
+  review, the scoped and specialized agents, concern review and the new-issue finder. Suggest prompts are unchanged.
+  Because the file is read from the target branch, a change that edits it is reviewed with the previous version.
 - `selectiveLogLevelOverride`: This setting allows for overriding the log level of specific messages, ensuring they are
   logged even if their level is above the current setting. This is useful for debugging without the need to set the
   overall log level to DEBUG, which could result in excessive DEBUG messages from sources like gerrit and other plugins.
