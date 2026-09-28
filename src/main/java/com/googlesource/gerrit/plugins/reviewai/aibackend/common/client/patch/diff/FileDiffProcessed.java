@@ -44,6 +44,8 @@ public class FileDiffProcessed {
   @Getter private List<DiffContent> reviewDiffContent;
   @Getter private String randomPlaceholder;
   @Getter private Optional<GerritCodeRange> commitMessageRange = Optional.empty();
+  // Lines of the commit message file as Gerrit numbers them (line n at index n - 1)
+  private List<String> commitMessageLines = List.of();
   private int lineNum;
   private DiffContent diffContentItem;
   private DiffContent reviewDiffContentItem;
@@ -82,6 +84,7 @@ public class FileDiffProcessed {
     if (content.isEmpty()) {
       return Optional.empty();
     }
+    commitMessageLines = content;
 
     int lastHeaderLine = -1;
     for (int i = 0; i < content.size(); i++) {
@@ -108,6 +111,54 @@ public class FileDiffProcessed {
             .endLine(lastMessageLine + 1)
             .endCharacter(content.get(lastMessageLine).length())
             .build());
+  }
+
+  /**
+   * Returns the commit-message lines that contain the given snippet, or the whole message when the
+   * snippet is missing or not found. Models quote the subject or a trailer they comment on; a
+   * range over the whole message would hide which line the comment is about.
+   */
+  public Optional<GerritCodeRange> findCommitMessageRange(String codeSnippet) {
+    if (commitMessageRange.isEmpty() || codeSnippet == null) {
+      return commitMessageRange;
+    }
+    List<String> snippetLines =
+        codeSnippet.lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
+    if (snippetLines.isEmpty()) {
+      return commitMessageRange;
+    }
+    int first = commitMessageRange.get().startLine - 1;
+    for (int start = first; start < commitMessageLines.size(); start++) {
+      int end = matchSnippetAt(start, snippetLines);
+      if (end >= 0) {
+        return Optional.of(
+            GerritCodeRange.builder()
+                .startLine(start + 1)
+                .startCharacter(0)
+                .endLine(end + 1)
+                .endCharacter(commitMessageLines.get(end).length())
+                .build());
+      }
+    }
+    return commitMessageRange;
+  }
+
+  /** Returns the index of the last line matched when the snippet starts at start, or -1. */
+  private int matchSnippetAt(int start, List<String> snippetLines) {
+    int line = start;
+    for (int i = 0; i < snippetLines.size(); i++) {
+      if (i > 0) {
+        line++;
+        while (line < commitMessageLines.size() && commitMessageLines.get(line).isBlank()) {
+          line++;
+        }
+      }
+      if (line >= commitMessageLines.size()
+          || !commitMessageLines.get(line).contains(snippetLines.get(i))) {
+        return -1;
+      }
+    }
+    return line;
   }
 
   private boolean isImmutableCommitHeader(String line) {

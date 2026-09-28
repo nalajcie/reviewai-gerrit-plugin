@@ -29,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class GerritCommentRange {
+  private static final String SUGGESTION_FENCE = "```suggestion";
+
   private final HashMap<String, FileDiffProcessed> fileDiffsProcessed;
 
   public GerritCommentRange(GerritClient gerritClient, GerritChange change) {
@@ -55,10 +57,16 @@ public class GerritCommentRange {
           fileDiffsProcessed);
       return gerritCommentRange;
     }
-    // A commit-message reply is anchored to the whole message, with or without a code snippet:
-    // the prompt tells the model to omit the snippet when no single line applies.
+    // A commit-message reply is anchored to the lines its snippet quotes, otherwise to the whole
+    // message: the prompt tells the model to omit the snippet when no single line applies. A
+    // suggested edit replaces the whole message, so it always covers all of it.
     if (filename.equals("/COMMIT_MSG")) {
-      return fileDiffsProcessed.get(filename).getCommitMessageRange();
+      FileDiffProcessed commitMessage = fileDiffsProcessed.get(filename);
+      String reply = replyItem.getReply();
+      if (reply != null && reply.contains(SUGGESTION_FENCE)) {
+        return commitMessage.getCommitMessageRange();
+      }
+      return commitMessage.findCommitMessageRange(replyItem.getCodeSnippet());
     }
     if (replyItem.getCodeSnippet() == null) {
       log.info("CodeSnippet is null in reply '{}'.", replyItem);
