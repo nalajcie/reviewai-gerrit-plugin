@@ -44,20 +44,49 @@ public final class AiCostTracker {
 
   /** Records the estimated cost of one provider response, attributed to a Gerrit project. */
   public void record(ChatResponse response, String project) {
+    record(response, project, null);
+  }
+
+  /** Also adds the response to the usage summary of the review, when there is one. */
+  public void record(ChatResponse response, String project, AiUsageSummary usageSummary) {
     if (config == null || metrics == null || response == null) {
       return;
     }
+    Long reviewNanoUsd = null;
+    try {
+      reviewNanoUsd = recordEstimatedCost(response, project);
+    } finally {
+      if (usageSummary != null) {
+        addToSummary(usageSummary, response, reviewNanoUsd);
+      }
+    }
+  }
+
+  private void addToSummary(AiUsageSummary usageSummary, ChatResponse response, Long nanoUsd) {
+    TokenUsage usage = response.tokenUsage();
+    AiModelRoute route = config.getSelectedAiModelRoute();
+    long input = usage == null || usage.inputTokenCount() == null ? 0 : usage.inputTokenCount();
+    long output = usage == null || usage.outputTokenCount() == null ? 0 : usage.outputTokenCount();
+    if (usage != null && usage.totalTokenCount() != null) {
+      // thinking tokens, as billed (see AiTokenUsageNormalizer)
+      output = Math.max(output, usage.totalTokenCount() - input);
+    }
+    usageSummary.add(route == null ? null : route.model(), input, output, nanoUsd);
+  }
+
+  /** Returns the estimated cost in nanoUSD, or null when it can't be estimated. */
+  private Long recordEstimatedCost(ChatResponse response, String project) {
     AiModelRoute route = config.getSelectedAiModelRoute();
     if (route == null
         || route.provider() == AiProviderType.OLLAMA
         || config.isSelectedMockAiModelRoute()) {
-      return;
+      return null;
     }
 
     Optional<ModelPricing> pricing = pricingCatalog.find(route);
     if (pricing.isEmpty()) {
       metrics.recordAiPricingMissing(route.providerRoute(), route.model());
-      return;
+      return null;
     }
 
     try {
@@ -75,11 +104,13 @@ public final class AiCostTracker {
             nanoUsd.getAsLong());
         metrics.recordAiEstimatedCostNanoUsd(
             route.providerRoute(), route.model(), project, nanoUsd.getAsLong());
+        return nanoUsd.getAsLong();
       } else {
         log.debug("AI response has no complete token usage for cost calculation: {}", route);
       }
     } catch (ArithmeticException e) {
       log.warn("AI cost exceeds the supported nanoUSD counter range for route {}", route, e);
     }
+    return null;
   }
 }

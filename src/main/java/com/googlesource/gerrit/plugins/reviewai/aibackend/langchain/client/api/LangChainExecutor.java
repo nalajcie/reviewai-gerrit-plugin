@@ -83,7 +83,7 @@ class LangChainExecutor {
     ChatRequest initialRequest = buildChatRequest(requestMessages, getInitialToolChoice());
     log.debug("Sending initial LangChain chat request: {}", LogArg.truncated(initialRequest));
     ChatResponse response = AiModelRequestLimiter.chat(config, model, initialRequest);
-    recordCost(response, change);
+    recordCost(response, change, changeSetData);
     AiMessage aiMessage = response != null ? response.aiMessage() : null;
     logAiMessageToolRequests("initial", aiMessage);
     int maxToolResponseRounds = config.getAiMaxToolResponseRounds();
@@ -131,7 +131,7 @@ class LangChainExecutor {
               buildChatRequest(
                   requestMessages,
                   iteration == maxToolResponseRounds ? ToolChoice.NONE : ToolChoice.AUTO));
-      recordCost(response, change);
+      recordCost(response, change, changeSetData);
       aiMessage = response != null ? response.aiMessage() : null;
       logAiMessageToolRequests("tool-continuation-" + iteration, aiMessage);
     }
@@ -163,7 +163,7 @@ class LangChainExecutor {
       response =
           AiModelRequestLimiter.chat(
               config, model, buildChatRequest(requestMessages, ToolChoice.NONE));
-      recordCost(response, change);
+      recordCost(response, change, changeSetData);
       aiMessage = response != null ? response.aiMessage() : null;
       logAiMessageToolRequests("final-answer-" + finalAnswerAttempts, aiMessage);
     }
@@ -191,9 +191,12 @@ class LangChainExecutor {
     return (output == null ? "" : output) + "\n\n" + note;
   }
 
-  private void recordCost(ChatResponse response, GerritChange change) {
+  private void recordCost(ChatResponse response, GerritChange change, ChangeSetData changeSetData) {
     if (costTracker != null) {
-      costTracker.record(response, change == null ? null : change.getProjectName());
+      costTracker.record(
+          response,
+          change == null ? null : change.getProjectName(),
+          changeSetData == null ? null : changeSetData.getAiUsageSummary());
     }
   }
 

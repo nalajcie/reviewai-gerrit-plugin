@@ -73,6 +73,7 @@ public class Configuration extends ConfigCore {
   private static final String KEY_AI_PROVIDER = AiProviderConfiguration.KEY_AI_PROVIDER;
   private static final boolean DEFAULT_REVIEW_PATCH_SET = true;
   private static final boolean DEFAULT_REVIEW_COMMIT_MESSAGES = true;
+  private static final boolean DEFAULT_AI_REVIEW_USAGE_IN_MESSAGE = false;
   private static final boolean DEFAULT_FULL_FILE_REVIEW = true;
   private static final String DEFAULT_CODE_CONTEXT_POLICY = "ON_DEMAND";
   private static final String DEFAULT_ENABLED_FILE_EXTENSIONS =
@@ -151,6 +152,7 @@ public class Configuration extends ConfigCore {
   private static final String KEY_AI_DOMAIN = AiProviderConfiguration.KEY_AI_DOMAIN;
 
   private static final String KEY_REVIEW_COMMIT_MESSAGES = "aiReviewCommitMessages";
+  private static final String KEY_AI_REVIEW_USAGE_IN_MESSAGE = "aiReviewUsageInMessage";
   private static final String KEY_REVIEW_PATCH_SET = "aiReviewPatchSet";
   private static final String KEY_FULL_FILE_REVIEW = "aiFullFileReview";
   private static final String KEY_CODE_CONTEXT_POLICY = "codeContextPolicy";
@@ -341,6 +343,11 @@ public class Configuration extends ConfigCore {
 
   public boolean getAiReviewPatchSet() {
     return getBoolean(KEY_REVIEW_PATCH_SET, DEFAULT_REVIEW_PATCH_SET);
+  }
+
+  /** Whether review messages end with the review's token usage and estimated cost. */
+  public boolean getAiReviewUsageInMessage() {
+    return getBoolean(KEY_AI_REVIEW_USAGE_IN_MESSAGE, DEFAULT_AI_REVIEW_USAGE_IN_MESSAGE);
   }
 
   public boolean getAiReviewCommitMessages() {

@@ -121,6 +121,35 @@ public class GerritClientReviewTest {
   }
 
   @Test
+  public void reviewMessageEndsWithTheUsageOfTheReview() throws Exception {
+    when(config.getAiReviewUsageInMessage()).thenReturn(true);
+    when(localizer.getText("message.review.usage")).thenReturn("usage: %s, %d, %s, %s, $%s");
+    changeSetData.getAiUsageSummary().add("gemini-3.8-flash", 23_000, 1_400, 19_000_000L);
+    ReviewBatch inlineComment = new ReviewBatch("Inline comment");
+    inlineComment.setFilename("src/Example.java");
+    inlineComment.setLine(42);
+
+    client.setReview(change, List.of(inlineComment), changeSetData);
+
+    ArgumentCaptor<ReviewInput> reviewInputCaptor = ArgumentCaptor.forClass(ReviewInput.class);
+    verify(revisionApi).review(reviewInputCaptor.capture());
+    assertTrue(
+        reviewInputCaptor.getValue().message.endsWith("usage: gemini-3.8-flash, 1, 23k, 1.4k, $0.019"));
+  }
+
+  @Test
+  public void reviewMessageHasNoUsageUnlessEnabled() throws Exception {
+    changeSetData.getAiUsageSummary().add("gemini-3.8-flash", 23_000, 1_400, 19_000_000L);
+
+    client.setReview(change, List.of(new ReviewBatch("Review comment")), changeSetData);
+
+    ArgumentCaptor<ReviewInput> reviewInputCaptor = ArgumentCaptor.forClass(ReviewInput.class);
+    verify(revisionApi).review(reviewInputCaptor.capture());
+    String message = reviewInputCaptor.getValue().message;
+    assertTrue(message == null || !message.contains("gemini-3.8-flash"));
+  }
+
+  @Test
   public void publishesPatchSetAndInlineCommentsAsUnresolved() throws Exception {
     ReviewBatch patchSetComment = new ReviewBatch("Patch set comment");
     ReviewBatch inlineComment = new ReviewBatch("Inline comment");

@@ -28,6 +28,7 @@ aiReviewApplicableIf:
 aiReviewCommitMessages: true
 aiReviewPatchSet: true
 aiReviewTemperature: 0.2
+aiReviewUsageInMessage: false
 aiSystemPromptInstructions: Act as a PatchSet Reviewer
 aiUploadedChunkSizeMb: 5
 codeContextPolicy: ON_DEMAND

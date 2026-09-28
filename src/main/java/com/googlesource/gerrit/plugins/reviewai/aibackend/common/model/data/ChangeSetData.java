@@ -28,6 +28,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.Re
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import com.googlesource.gerrit.plugins.reviewai.metrics.cost.AiUsageSummary;
 import java.util.Map;
 import java.util.Set;
 import lombok.Data;
@@ -67,6 +68,8 @@ public class ChangeSetData {
   private transient Boolean moderatorFeaturesAllowed = false;
   private transient boolean reviewFeedbackClassified;
   private transient AiRequestCancellation aiRequestCancellation = new AiRequestCancellation();
+  // Shared by the copies made for the stages of one review, like the cancellation.
+  private transient AiUsageSummary aiUsageSummary = new AiUsageSummary();
   // Review group members of a multi-project review, keyed by the filename prefix that identifies
   // them in the merged patch and in on-demand code context tool paths.
   private transient Map<String, GerritChange> reviewGroupChangesByPrefix = Map.of();
@@ -179,6 +182,7 @@ public class ChangeSetData {
     copy.setModeratorFeaturesAllowed(moderatorFeaturesAllowed);
     copy.setReviewFeedbackClassified(reviewFeedbackClassified);
     copy.setAiRequestCancellation(aiRequestCancellation);
+    copy.setAiUsageSummary(aiUsageSummary);
     copy.setReviewGroupChangesByPrefix(reviewGroupChangesByPrefix);
     copy.setReviewGroupHeader(reviewGroupHeader);
     copy.setSuggestionReviewPass(suggestionReviewPass);

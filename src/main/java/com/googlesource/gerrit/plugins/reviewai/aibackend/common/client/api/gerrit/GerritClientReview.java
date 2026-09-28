@@ -258,6 +258,12 @@ public class GerritClientReview extends GerritClientAccount {
       messages.add(SystemMessageFormatter.getPrefixedSystemMessage(localizer, systemMessage));
     }
     SystemMessageFormatter.appendConfigurationWarningMessages(config, localizer, messages);
+    if (config.getAiReviewUsageInMessage() && changeSetData.getAiUsageSummary() != null) {
+      changeSetData
+          .getAiUsageSummary()
+          .takeReportLine(localizer.getText("message.review.usage"))
+          .ifPresent(messages::add);
+    }
 
     if (!messages.isEmpty()) {
       reviewInput.message(joinWithDoubleNewLine(messages));
