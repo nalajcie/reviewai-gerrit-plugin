@@ -90,6 +90,7 @@ public class Configuration extends ConfigCore {
   private static final List<String> DEFAULT_CODE_CONTEXT_PROJECTS = new ArrayList<>();
   private static final int DEFAULT_MAX_REVIEW_LINES = 1000;
   private static final int DEFAULT_PATCH_CONTEXT_LINES = 3;
+  private static final int DEFAULT_PATCH_FULL_FILE_MAX_BYTES = 0;
   private static final boolean DEFAULT_ENABLED_VOTING = false;
   private static final boolean DEFAULT_AI_PROJECT_INSTRUCTIONS_IN_REVIEWS = false;
   private static final boolean DEFAULT_CONVERT_NEUTRAL_REVIEW_SCORE_TO_POSITIVE = true;
@@ -158,6 +159,7 @@ public class Configuration extends ConfigCore {
   private static final String KEY_CODE_CONTEXT_POLICY = "codeContextPolicy";
   private static final String KEY_MAX_REVIEW_LINES = "maxReviewLines";
   private static final String KEY_PATCH_CONTEXT_LINES = "patchContextLines";
+  private static final String KEY_PATCH_FULL_FILE_MAX_BYTES = "patchFullFileMaxBytes";
   private static final String KEY_ENABLED_FILE_EXTENSIONS = "enabledFileExtensions";
   private static final String KEY_DISABLED_FILE_EXTENSIONS = "disabledFileExtensions";
   private static final String KEY_ENABLED_VOTING = "enabledVoting";
@@ -375,6 +377,14 @@ public class Configuration extends ConfigCore {
         0,
         Integer.parseInt(
             getString(KEY_PATCH_CONTEXT_LINES, String.valueOf(DEFAULT_PATCH_CONTEXT_LINES))));
+  }
+
+  /**
+   * Changed text files up to this size are sent with their whole content as context, instead of
+   * {@link #getPatchContextLines()} lines around each hunk; 0 (default) turns it off.
+   */
+  public int getPatchFullFileMaxBytes() {
+    return Math.max(0, getInt(KEY_PATCH_FULL_FILE_MAX_BYTES, DEFAULT_PATCH_FULL_FILE_MAX_BYTES));
   }
 
   public List<String> getEnabledFileExtensions() {

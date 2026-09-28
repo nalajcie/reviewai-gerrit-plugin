@@ -75,6 +75,7 @@ ollamaDomain: http://localhost:11434
 ollamaResponseLength: -1
 ollamaThink: false
 patchContextLines: 3
+patchFullFileMaxBytes: 0
 selectiveLogLevelOverride:
 storePassword:
 storeUrl:

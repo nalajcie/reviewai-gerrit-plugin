@@ -78,6 +78,40 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   }
 
   @Test
+  public void getContentPointsToThePatchForChangedFilesShownInFull() throws Exception {
+    when(config.getPatchFullFileMaxBytes()).thenReturn(64 * 1024);
+    when(config.getEnabledFileExtensions()).thenReturn(List.of("py"));
+    when(gitRepoFiles.getPatchSetFileForTool(change, "stats/demo.py"))
+        .thenReturn(new GitRepoFiles.ToolFileContent("print(1)", 40_000, false, false));
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(Set.of("stats/demo.py"));
+
+    assertEquals(
+        String.format(OnDemandCodeContextTools.SHOWN_IN_FULL, "stats/demo.py"),
+        tools.execute("get_content", "{\"file_path\":\"stats/demo.py\"}"));
+  }
+
+  @Test
+  public void getContentReturnsChangedFilesAboveTheFullFileLimit() throws Exception {
+    when(config.getPatchFullFileMaxBytes()).thenReturn(1024);
+    when(gitRepoFiles.getPatchSetFileForTool(change, "stats/demo.py"))
+        .thenReturn(new GitRepoFiles.ToolFileContent("print(1)", 40_000, false, false));
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(Set.of("stats/demo.py"));
+
+    assertEquals("print(1)", tools.execute("get_content", "{\"file_path\":\"stats/demo.py\"}"));
+  }
+
+  @Test
+  public void getContentReturnsChangedFilesTheExtensionFilterLeftOutOfThePatch() throws Exception {
+    when(config.getPatchFullFileMaxBytes()).thenReturn(64 * 1024);
+    when(config.getEnabledFileExtensions()).thenReturn(List.of("py"));
+    when(gitRepoFiles.getPatchSetFileForTool(change, "data.json"))
+        .thenReturn(new GitRepoFiles.ToolFileContent("{}", 2, false, false));
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(Set.of("data.json"));
+
+    assertEquals("{}", tools.execute("get_content", "{\"file_path\":\"data.json\"}"));
+  }
+
+  @Test
   public void getContentSaysWhenAFileIsCut() throws Exception {
     when(gitRepoFiles.getPatchSetFileForTool(change, "big.c"))
         .thenReturn(new GitRepoFiles.ToolFileContent("int a;", 300 * 1024, false, true));

@@ -413,6 +413,12 @@ commitMessageDirective = "A ticket trailer (for example Bug: 123) is required."
 - `maxReviewLines`: The default value is 1000. This sets a limit on the number of lines of code included in the review.
 - `patchContextLines`: The default value is 3. This sets how many unchanged context lines are included around each
   changed hunk in the patch passed to AI. Set it to 0 to include only changed lines.
+- `patchFullFileMaxBytes` (fork): The default value is 0 (off). Changed text files up to this size (bytes of the new
+  version) are included in the patch with their whole content as context, so the model does not have to fetch them
+  with `get_content`; larger files keep `patchContextLines`. The `get_content` tool description says so, and a
+  `get_content` call for such a file returns a note pointing to the patch. Note that the context lines count towards
+  `maxReviewLines`. (`aiFullFileReview` only affects the Gerrit diff used to place comments, not the patch sent to
+  the model.)
 - `codeContextPolicy`: Defines the code context policy used when AI needs repository context outside the formatted
   patch. The default value is `NONE`.
   The currently supported policies are:

@@ -100,6 +100,38 @@ public class GerritClientPatchSetReviewAiTest extends TestBase {
   }
 
   @Test
+  public void getPatchSetSendsSmallChangedFilesInFull() throws Exception {
+    RevCommit modifyCommit = createModifyCommit();
+    mockGerritPatch(modifyCommit, getContextLinesPatch(), "context.py", 0);
+    when(config.getPatchFullFileMaxBytes()).thenReturn(64 * 1024);
+
+    GerritClientPatchSetReviewAi client =
+        new GerritClientPatchSetReviewAi(config, repositoryManager);
+    String patchSet = client.getPatchSet(new ChangeSetData(1), getGerritChange());
+
+    String[] modifiedLines = getContextPatchModified().split("\\R");
+    Assert.assertTrue(patchSet.contains("+" + modifiedLines[2]));
+    // every unchanged line is context, from the first to the last
+    Assert.assertTrue(patchSet.contains(" " + modifiedLines[0]));
+    Assert.assertTrue(patchSet.contains(" " + modifiedLines[modifiedLines.length - 1]));
+  }
+
+  @Test
+  public void getPatchSetKeepsHunkContextForFilesAboveTheFullFileLimit() throws Exception {
+    RevCommit modifyCommit = createModifyCommit();
+    mockGerritPatch(modifyCommit, getContextLinesPatch(), "context.py", 0);
+    when(config.getPatchFullFileMaxBytes()).thenReturn(8);
+
+    GerritClientPatchSetReviewAi client =
+        new GerritClientPatchSetReviewAi(config, repositoryManager);
+    String patchSet = client.getPatchSet(new ChangeSetData(1), getGerritChange());
+
+    String[] originalLines = getContextPatchOriginal().split("\\R");
+    Assert.assertTrue(patchSet.contains("-" + originalLines[2]));
+    Assert.assertFalse(patchSet.contains(" " + originalLines[1]));
+  }
+
+  @Test
   public void getPatchSetUsesConfiguredPatchContextLines() throws Exception {
     RevCommit modifyCommit = createModifyCommit();
     mockGerritPatch(modifyCommit, getContextLinesPatch(), "context.py", 0);

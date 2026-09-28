@@ -825,6 +825,13 @@ public class LangChainClient extends AiClientBase implements IAiClient {
                   ? "Scope: the whole repository at this patch set."
                   : "Scope: ONLY the files changed by this patch set, not the rest of the"
                       + " repository.";
+          case OnDemandCodeContextTools.GET_CONTENT ->
+              config.getPatchFullFileMaxBytes() > 0
+                  ? String.format(
+                      "Changed files up to %d KB are already shown in full in the patch: do not"
+                          + " request them, use this for other files.",
+                      config.getPatchFullFileMaxBytes() / 1024)
+                  : null;
           default -> null;
         };
     if (scope == null) {

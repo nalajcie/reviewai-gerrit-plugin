@@ -16,6 +16,7 @@
 | `aiBudgetDailyUsd`, `aiBudgetMonthlyUsd`, `aiBudgetProjectMonthlyUsd` | Budgets on the estimated cost: automatic reviews stop at 100 %, manual requests at 120 %. Admin endpoint `ai-usage` reports the spend. See [AI Budgets](docs/configuration.md#ai-budgets). |
 | telemetry | A `project` field on review-run and cost metrics, plus `ai_request/project_count`. See [telemetry](docs/telemetry.md). |
 | `codeContextSearchScope = REPOSITORY` | ON_DEMAND `grep` and `tree` cover the whole repository at the patch set instead of only the changed files, with bounded results; the tool descriptions state the scope. See [codeContextSearchScope](docs/configuration.md#optional-parameters). |
+| `patchFullFileMaxBytes` | Changed text files up to this size go into the patch with their whole content, instead of `patchContextLines` around each hunk; `get_content` for them points back to the patch. Off by default. The model otherwise saw 3 lines around each hunk and spent its tool rounds fetching the changed files. |
 | `aiReviewUsageInMessage` | Ends the review message with the review's models, number of AI requests, input/output tokens and estimated cost. |
 | tool budget | Every tool result tells the model how many tool rounds are left; calls past `aiMaxToolResponseRounds` are rejected with a request for the final answer. If that brings more tool calls or an empty reply, the model is asked again (twice at most) in a fresh request without tools that carries the tool results as text. On Gemini 3 these final-answer requests use `thinking_level=LOW`. Always on. |
 | Review Agent action | "Review With Related Changes" runs `/review --topic`; its hover text shows the `maxReviewLines` limit. |
@@ -41,6 +42,8 @@ Fixes kept in this fork for now (fork-specific code paths or not yet proposed up
   it quotes (e.g. the subject) instead of the whole message; suggested edits still cover the whole message.
 - `get_content` returned binary files as text (a 500 KB flash loader added 155k tokens to every later request) and did
   not limit size; binary and LFS files are now reported without content and text is cut at 64 KB.
+- A review stage answered `{}` (no `replies`) and merging it with the commit-message replies threw a
+  NullPointerException; `{}` after tool rounds is now also asked again like an empty reply.
 - Group reviews used the comments of the last group member for the reviewed change ("Pending review feedback comment is
   missing from Gerrit" on `/review --topic`).
 - Empty `grep`/`tree` results now say that they only cover the changed files, instead of `CONTEXT NOT PROVIDED`, which

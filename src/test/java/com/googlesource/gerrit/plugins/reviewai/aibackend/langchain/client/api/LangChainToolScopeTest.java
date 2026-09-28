@@ -54,6 +54,16 @@ public class LangChainToolScopeTest {
     assertTrue(tool.description().contains("Binary files are reported without their content"));
   }
 
+  @Test
+  public void getContentSaysChangedFilesAreInThePatchWhenSentInFull() {
+    Configuration config = config(CodeContextSearchScope.CHANGED_FILES);
+    when(config.getPatchFullFileMaxBytes()).thenReturn(64 * 1024);
+
+    assertTrue(
+        describe("config/getContentTool.json", config)
+            .startsWith("Changed files up to 64 KB are already shown in full in the patch"));
+  }
+
   private static String describe(String resource, Configuration config) {
     ToolSpecification scoped = LangChainClient.withSearchScope(load(resource), config);
     assertEquals(load(resource).parameters(), scoped.parameters());

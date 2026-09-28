@@ -37,7 +37,9 @@ import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
+import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ObjectReader;
 import org.eclipse.jgit.lib.Repository;
@@ -53,6 +55,8 @@ import org.eclipse.jgit.treewalk.EmptyTreeIterator;
 public class GerritClientPatchSetReviewAi extends GerritClientPatchSet
     implements IGerritClientPatchSet {
   private static final Pattern PATCH_DIFF_START = Pattern.compile("(?m)^diff --git ");
+  // Context that covers any file below patchFullFileMaxBytes; JGit clamps it to the file.
+  private static final int FULL_FILE_CONTEXT_LINES = 1_000_000;
 
   private final GitRepositoryManager repositoryManager;
   private GerritChange change;
@@ -225,7 +229,7 @@ public class GerritClientPatchSetReviewAi extends GerritClientPatchSet
       } else {
         RevCommit parent = revWalk.parseCommit(commit.getParent(0).getId());
         RevTree parentTree = parent.getTree();
-        diffFormatter.format(parentTree, commit.getTree());
+        formatWithFileContext(repository, diffFormatter, parentTree, commit.getTree());
       }
 
       diffFormatter.flush();
@@ -244,7 +248,7 @@ public class GerritClientPatchSetReviewAi extends GerritClientPatchSet
       diffFormatter.setDetectRenames(true);
       diffFormatter.setContext(config.getPatchContextLines());
       RevTree incrementalBaseTree = incrementalBaseTree(repository, revWalk, baseCommit, commit);
-      diffFormatter.format(incrementalBaseTree, commit.getTree());
+      formatWithFileContext(repository, diffFormatter, incrementalBaseTree, commit.getTree());
       diffFormatter.flush();
       return outputStream.toString(StandardCharsets.UTF_8);
     }
@@ -280,6 +284,44 @@ public class GerritClientPatchSetReviewAi extends GerritClientPatchSet
         baseCommit.getName(),
         currentParent.getName());
     return currentParent.getTree();
+  }
+
+  /**
+   * Formats the diff file by file: changed files up to {@code patchFullFileMaxBytes} get their
+   * whole content as context, so the model does not need to fetch them; others get {@code
+   * patchContextLines}.
+   */
+  private void formatWithFileContext(
+      Repository repository, DiffFormatter diffFormatter, RevTree oldTree, RevTree newTree)
+      throws Exception {
+    int fullFileMaxBytes = config.getPatchFullFileMaxBytes();
+    if (fullFileMaxBytes <= 0) {
+      diffFormatter.format(oldTree, newTree);
+      return;
+    }
+    int contextLines = config.getPatchContextLines();
+    try (ObjectReader reader = repository.newObjectReader()) {
+      for (DiffEntry entry : diffFormatter.scan(oldTree, newTree)) {
+        diffFormatter.setContext(
+            isFullFileContext(reader, entry, fullFileMaxBytes)
+                ? FULL_FILE_CONTEXT_LINES
+                : contextLines);
+        diffFormatter.format(entry);
+      }
+    }
+    diffFormatter.setContext(contextLines);
+  }
+
+  private static boolean isFullFileContext(ObjectReader reader, DiffEntry entry, int maxBytes) {
+    if (entry.getChangeType() == DiffEntry.ChangeType.DELETE
+        || entry.getNewMode().getObjectType() != Constants.OBJ_BLOB) {
+      return false;
+    }
+    try {
+      return reader.getObjectSize(entry.getNewId().toObjectId(), Constants.OBJ_BLOB) <= maxBytes;
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   private static void formatRootCommitDiff(

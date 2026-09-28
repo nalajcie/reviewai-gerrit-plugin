@@ -27,6 +27,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.CodeContextProject;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration.CodeContextSearchScope;
+import com.googlesource.gerrit.plugins.reviewai.utils.FileUtils;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -73,6 +74,9 @@ public class OnDemandCodeContextTools extends ClientBase {
           + " longer string or a `path`.]";
   private static final String REPOSITORY_GREP_FILE_LIMIT =
       "[Search stopped after %d files. Narrow it with a `path`.]";
+  static final String SHOWN_IN_FULL =
+      "ALREADY IN THE PATCH: %s is changed by this patch set and the patch above shows its whole"
+          + " content. Read it there; do not request changed files.";
   private static final String BINARY_FILE =
       "BINARY FILE (%d bytes): content not shown. Review its role from the files that use it.";
   private static final String TRUNCATED_FILE =
@@ -281,6 +285,9 @@ public class OnDemandCodeContextTools extends ClientBase {
     }
     GitRepoFiles.ToolFileContent file =
         gitRepoFiles.getPatchSetFileForTool(resolvedPath.change(), resolvedPath.path());
+    if (isShownInFullInPatch(resolvedPath, file)) {
+      return String.format(SHOWN_IN_FULL, filePath);
+    }
     String content;
     if (file.binary()) {
       content = String.format(BINARY_FILE, file.sizeBytes());
@@ -297,6 +304,24 @@ public class OnDemandCodeContextTools extends ClientBase {
       return PREEXISTING_CONTEXT_MARKER + content;
     }
     return content;
+  }
+
+  /** Whether the reviewed patch already has this file with its whole content (patchFullFileMaxBytes). */
+  private boolean isShownInFullInPatch(ResolvedPath resolvedPath, GitRepoFiles.ToolFileContent file) {
+    if (config == null
+        || config.getPatchFullFileMaxBytes() <= 0
+        || resolvedPath.change() != change
+        || file.binary()
+        || file.sizeBytes() > config.getPatchFullFileMaxBytes()) {
+      return false;
+    }
+    Set<String> changed = changedFiles(change);
+    return changed != null
+        && changed.contains(resolvedPath.path())
+        && FileUtils.isFileExtensionEnabled(
+            resolvedPath.path(),
+            config.getEnabledFileExtensions(),
+            config.getDisabledFileExtensions());
   }
 
   private static boolean isCommitMessagePath(String filePath) {
