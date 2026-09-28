@@ -46,6 +46,16 @@ public class OnDemandCodeContextTools extends ClientBase {
   public static final Set<String> FUNCTION_NAMES = Set.of(TREE, GET_CONTENT, GREP);
 
   private static final String CONTEXT_NOT_PROVIDED = "CONTEXT NOT PROVIDED";
+  // Without this hint the model retried the same search with small variations until the tool
+  // budget ran out.
+  private static final String NOT_FOUND_IN_CHANGED_FILES =
+      "No match. grep and tree only cover the files changed by this patch set (and the"
+          + " reviewai-context/ projects). Don't retry variations of the same search; open other"
+          + " files directly with get_content if you know their path.";
+  private static final String NO_CHANGED_FILES_BELOW =
+      "No files. tree only lists the files changed by this patch set (and the reviewai-context/"
+          + " projects), not the whole repository. Open other files directly with get_content if"
+          + " you know their path.";
   private static final String PREEXISTING_CONTEXT_MARKER =
       "NOTE: This file is pre-existing repository context and is NOT part of the current change.\n\n";
   private static final String CODE_CONTEXT_PROJECT_MARKER =
@@ -191,7 +201,7 @@ public class OnDemandCodeContextTools extends ClientBase {
       codeContextProjects.forEach(project -> lines.add(project.prefix() + "..."));
       output = String.join("\n", lines);
     }
-    return output.isEmpty() ? CONTEXT_NOT_PROVIDED : output;
+    return output.isEmpty() ? NO_CHANGED_FILES_BELOW : output;
   }
 
   private String contextTree(ContextPath contextPath) {
@@ -281,7 +291,7 @@ public class OnDemandCodeContextTools extends ClientBase {
       }
     }
     if (matches.isEmpty()) {
-      return CONTEXT_NOT_PROVIDED;
+      return contextPath.isPresent() ? CONTEXT_NOT_PROVIDED : NOT_FOUND_IN_CHANGED_FILES;
     }
     return String.join("\n", matches);
   }

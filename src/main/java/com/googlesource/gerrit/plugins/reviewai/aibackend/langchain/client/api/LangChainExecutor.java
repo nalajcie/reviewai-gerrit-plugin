@@ -45,6 +45,18 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 class LangChainExecutor {
 
+  static final int MAX_FINAL_ANSWER_ATTEMPTS = 2;
+  static final String TOOL_BUDGET_NOTE =
+      "[ReviewAI tool budget: round %d of %d used, %d left. Request all the lookups you still"
+          + " need in one round; answer as soon as you have enough context.]";
+  static final String TOOL_BUDGET_LAST_ROUND =
+      "[ReviewAI tool budget: this was the last tool round. Tool calls are no longer executed;"
+          + " return your final answer now.]";
+  static final String TOOL_BUDGET_EXHAUSTED =
+      "REJECTED: the tool budget of %d rounds is used up and this call was not executed. Do not"
+          + " call any tool again. Return your final answer now, in the required format, based on"
+          + " the context you already have.";
+
   private final Configuration config;
   private final ResponseFormat structuredResponseFormat;
   private final List<ToolSpecification> onDemandTools;
@@ -92,7 +104,11 @@ class LangChainExecutor {
           maxToolResponseRounds,
           requests.size());
       for (ToolExecutionRequest request : requests) {
-        String output = executeToolRequest(request, change, changeSetData);
+        String output =
+            withToolBudgetNote(
+                executeToolRequest(request, change, changeSetData),
+                iteration,
+                maxToolResponseRounds);
         log.debug(
             "Adding LangChain tool result for request id={}, name={}, outputLength={}",
             request.id(),
@@ -121,6 +137,37 @@ class LangChainExecutor {
     }
     log.debug("Received LangChain response message: {}", aiMessage);
 
+    // Models don't always honour ToolChoice.NONE (Gemini 3 kept calling tools). Reject the calls
+    // with an explicit tool result and ask for the final answer, instead of ending with nothing.
+    int finalAnswerAttempts = 0;
+    while (aiMessage != null
+        && aiMessage.hasToolExecutionRequests()
+        && finalAnswerAttempts < MAX_FINAL_ANSWER_ATTEMPTS) {
+      finalAnswerAttempts++;
+      log.info(
+          "Tool budget of {} rounds used up; rejecting {} tool requests and asking for the final"
+              + " answer (attempt {} of {})",
+          maxToolResponseRounds,
+          aiMessage.toolExecutionRequests().size(),
+          finalAnswerAttempts,
+          MAX_FINAL_ANSWER_ATTEMPTS);
+      requestMessages.add(aiMessage);
+      memory.add(aiMessage);
+      for (ToolExecutionRequest request : aiMessage.toolExecutionRequests()) {
+        ToolExecutionResultMessage rejection =
+            ToolExecutionResultMessage.from(
+                request, String.format(TOOL_BUDGET_EXHAUSTED, maxToolResponseRounds));
+        requestMessages.add(rejection);
+        memory.add(rejection);
+      }
+      response =
+          AiModelRequestLimiter.chat(
+              config, model, buildChatRequest(requestMessages, ToolChoice.NONE));
+      recordCost(response, change);
+      aiMessage = response != null ? response.aiMessage() : null;
+      logAiMessageToolRequests("final-answer-" + finalAnswerAttempts, aiMessage);
+    }
+
     if (aiMessage != null && aiMessage.hasToolExecutionRequests()) {
       log.warn(
           "LangChain tool execution stopped after {} rounds with pending tool requests: {}",
@@ -134,6 +181,14 @@ class LangChainExecutor {
         aiMessage != null,
         aiMessage != null && aiMessage.hasToolExecutionRequests());
     return aiMessage;
+  }
+
+  static String withToolBudgetNote(String output, int round, int maxRounds) {
+    String note =
+        round < maxRounds
+            ? String.format(TOOL_BUDGET_NOTE, round, maxRounds, maxRounds - round)
+            : TOOL_BUDGET_LAST_ROUND;
+    return (output == null ? "" : output) + "\n\n" + note;
   }
 
   private void recordCost(ChatResponse response, GerritChange change) {

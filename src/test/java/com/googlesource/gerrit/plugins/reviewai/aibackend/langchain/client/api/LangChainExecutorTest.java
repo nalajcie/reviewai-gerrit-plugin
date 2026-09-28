@@ -169,6 +169,79 @@ public class LangChainExecutorTest {
   }
 
   @Test
+  public void rejectsToolCallsPastTheBudgetAndAsksForTheFinalAnswer() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiMaxToolResponseRounds()).thenReturn(2);
+    GerritChange change = Mockito.mock(GerritChange.class);
+    when(change.getFullChangeId()).thenReturn("project~branch~change");
+    GitRepoFiles gitRepoFiles = Mockito.mock(GitRepoFiles.class);
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null)).thenReturn(List.of());
+    // call_3 comes back although the last continuation disabled tools
+    RecordingChatModel model =
+        new RecordingChatModel(
+            AiMessage.from(List.of(toolRequest("call_1"))),
+            AiMessage.from(List.of(toolRequest("call_2"))),
+            AiMessage.from(List.of(toolRequest("call_3"))),
+            AiMessage.from("done"));
+
+    AiMessage result =
+        new LangChainExecutor(
+                config, null, List.of(treeToolSpecification()), true, gitRepoFiles, null)
+            .execute(model, change, memory());
+
+    assertEquals("done", result.text());
+    assertEquals(4, model.requests.size());
+    assertTrue(toolResultText(model.requests.get(1).messages(), "call_1").contains("round 1 of 2 used, 1 left"));
+    assertTrue(toolResultText(model.requests.get(2).messages(), "call_2").contains("last tool round"));
+    assertEquals(ToolChoice.NONE, model.requests.get(3).toolChoice());
+    assertTrue(toolResultText(model.requests.get(3).messages(), "call_3").startsWith("REJECTED"));
+  }
+
+  @Test
+  public void givesUpAfterTheFinalAnswerAttempts() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiMaxToolResponseRounds()).thenReturn(1);
+    GerritChange change = Mockito.mock(GerritChange.class);
+    when(change.getFullChangeId()).thenReturn("project~branch~change");
+    GitRepoFiles gitRepoFiles = Mockito.mock(GitRepoFiles.class);
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null)).thenReturn(List.of());
+    RecordingChatModel model =
+        new RecordingChatModel(
+            AiMessage.from(List.of(toolRequest("call_1"))),
+            AiMessage.from(List.of(toolRequest("call_2"))),
+            AiMessage.from(List.of(toolRequest("call_3"))),
+            AiMessage.from(List.of(toolRequest("call_4"))));
+
+    AiMessage result =
+        new LangChainExecutor(
+                config, null, List.of(treeToolSpecification()), true, gitRepoFiles, null)
+            .execute(model, change, memory());
+
+    assertTrue(result.hasToolExecutionRequests());
+    assertEquals(2 + LangChainExecutor.MAX_FINAL_ANSWER_ATTEMPTS, model.requests.size());
+  }
+
+  private static ChatMemory memory() {
+    ChatMemory memory =
+        TokenWindowChatMemory.builder()
+            .id("review")
+            .maxTokens(100000, new TestTokenCountEstimator())
+            .build();
+    memory.add(UserMessage.from("review"));
+    return memory;
+  }
+
+  private static String toolResultText(List<ChatMessage> messages, String id) {
+    return messages.stream()
+        .filter(ToolExecutionResultMessage.class::isInstance)
+        .map(ToolExecutionResultMessage.class::cast)
+        .filter(message -> id.equals(message.id()))
+        .map(ToolExecutionResultMessage::text)
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
   public void completesToolExchangeAfterReviewIsSuperseded() {
     Configuration config = Mockito.mock(Configuration.class);
     when(config.getAiMaxToolResponseRounds()).thenReturn(3);
@@ -229,7 +302,8 @@ public class LangChainExecutorTest {
     return messages.stream()
         .filter(ToolExecutionResultMessage.class::isInstance)
         .map(ToolExecutionResultMessage.class::cast)
-        .anyMatch(message -> id.equals(message.id()) && output.equals(message.text()));
+        // the executor appends the tool budget note to every tool output
+        .anyMatch(message -> id.equals(message.id()) && message.text().startsWith(output + "\n\n"));
   }
 
   private static boolean hasToolResult(List<ChatMessage> messages, String id) {

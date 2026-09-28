@@ -157,6 +157,24 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   }
 
   @Test
+  public void emptyGrepAndTreeExplainTheirScope() throws Exception {
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(Set.of("changed.py"));
+    when(gitRepoFiles.grepPatchSet(config, change, "def upsert", Set.of("changed.py")))
+        .thenReturn(List.of());
+    when(gitRepoFiles.getPatchSetFileTree(config, change, "lib"))
+        .thenReturn(List.of("lib/db.py"));
+
+    assertTrue(
+        tools
+            .execute("grep", "{\"string\":\"def upsert\"}")
+            .startsWith("No match. grep and tree only cover the files changed by this patch set"));
+    assertTrue(
+        tools
+            .execute("tree", "{\"subdir\":\"lib\"}")
+            .startsWith("No files. tree only lists the files changed by this patch set"));
+  }
+
+  @Test
   public void grepFiltersToChangedFiles() throws Exception {
     when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(Set.of("changed.py"));
     when(gitRepoFiles.grepPatchSet(config, change, "typing", Set.of("changed.py")))
