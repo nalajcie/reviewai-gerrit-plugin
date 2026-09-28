@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.InOrder;
 import org.mockito.ArgumentCaptor;
 
 public class ReviewGroupReviewerTest {
@@ -116,7 +118,10 @@ public class ReviewGroupReviewerTest {
     reviewer.reviewGroup(members(), false);
 
     ArgumentCaptor<String> mergedPatch = ArgumentCaptor.forClass(String.class);
-    verify(patchSetReviewer).getReviewReply(eq(superproject), mergedPatch.capture());
+    InOrder order = inOrder(gerritClient, patchSetReviewer);
+    order.verify(gerritClient).getPatchSet(coreLibs);
+    order.verify(gerritClient).retrievePatchSetInfo(superproject);
+    order.verify(patchSetReviewer).getReviewReply(eq(superproject), mergedPatch.capture());
     String patch = mergedPatch.getValue();
     assertTrue(patch.contains("ReviewAI review group members:"));
     assertTrue(
@@ -160,7 +165,10 @@ public class ReviewGroupReviewerTest {
 
     reviewer.reviewGroup(members(), false);
 
-    verify(patchSetReviewer).review(superproject, false);
+    InOrder order = inOrder(gerritClient, patchSetReviewer);
+    order.verify(gerritClient).getPatchSet(coreLibs);
+    order.verify(gerritClient).retrievePatchSetInfo(superproject);
+    order.verify(patchSetReviewer).review(superproject, false);
     verify(patchSetReviewer, never()).getReviewReply(any(), anyString());
     verify(patchSetReviewer, never()).publishTopicReviewPart(any(), any(), any(), any());
     assertTrue(headers.getFirst().contains("ReviewAI review group members:"));

@@ -195,6 +195,9 @@ class TopicPatchSetReviewer {
             + reviewedChange.getChangeNumber().map(String::valueOf).orElse("?")
             + " is included below; the other members are listed for context. Use unprefixed"
             + " filenames in inline replies.");
+    // Reading the other members' patches left their comments and revision base in the shared
+    // client state; reload them for the change that is reviewed (pending feedback, history).
+    gerritClient.retrievePatchSetInfo(reviewedChange);
     try {
       patchSetReviewer.review(reviewedChange, includeAiFailureDetails);
     } finally {
@@ -209,6 +212,7 @@ class TopicPatchSetReviewer {
       List<TopicReviewPatchSet> publishedPatchSets,
       boolean includeAiFailureDetails)
       throws Exception {
+    gerritClient.retrievePatchSetInfo(primaryChange);
     gerritClient.getPatchSet(primaryChange);
     ChangeSetDataHandler.update(config, primaryChange, gerritClient, changeSetData, localizer);
     AiResponseContent reviewReply = null;
