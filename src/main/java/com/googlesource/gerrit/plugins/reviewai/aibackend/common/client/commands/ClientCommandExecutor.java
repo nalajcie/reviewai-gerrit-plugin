@@ -34,9 +34,12 @@ import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.clie
 import com.googlesource.gerrit.plugins.reviewai.interfaces.aibackend.common.client.commands.IPatchSetProvider;
 import com.googlesource.gerrit.plugins.reviewai.localization.Localizer;
 import com.googlesource.gerrit.plugins.reviewai.localization.SystemMessageFormatter;
+import com.googlesource.gerrit.plugins.reviewai.permissions.AiRole;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -45,6 +48,7 @@ public class ClientCommandExecutor extends ClientCommandBase {
   private final GerritChange change;
   private final ICodeContextPolicy codeContextPolicy;
   private final Localizer localizer;
+  private CommandAvailability commandAvailability;
   private final PluginDataHandlerProvider pluginDataHandlerProvider;
   private final PluginChatMemoryStore chatMemoryStore;
   private final ReviewConcernPublisher reviewConcernPublisher;
@@ -69,6 +73,7 @@ public class ClientCommandExecutor extends ClientCommandBase {
       ReviewFeedbackPublisher reviewFeedbackPublisher,
       ClientCommandExtension commandExtension) {
     super(config);
+    this.commandAvailability = CommandAvailability.of(AiRole.USER);
     this.localizer = localizer;
     this.changeSetData = changeSetData;
     this.change = change;
@@ -134,25 +139,38 @@ public class ClientCommandExecutor extends ClientCommandBase {
       changeSetData.setReviewSystemMessage(getSingleCommandHelpMessage(requestedCommand));
       return;
     }
-    changeSetData.setReviewSystemMessage(
-        joinWithNewLine(
-            List.of(
-                localizer.getText("message.command.help.title"),
-                "",
-                localizer.getText("message.command.help.notes.detail"),
-                "",
-                localizer.getText("message.command.help.help"),
-                localizer.getText("message.command.help.message"),
-                localizer.getText("message.command.help.review"),
-                localizer.getText("message.command.help.suggest"),
-                localizer.getText("message.command.help.directives"),
-                localizer.getText("message.command.help.forget_thread"),
-                localizer.getText("message.command.help.configure"),
-                localizer.getText("message.command.help.show"),
-                "",
-                localizer.getText("message.command.help.notes.title"),
-                localizer.getText("message.command.help.notes.debug"),
-                localizer.getText("message.command.help.notes.message"))));
+    changeSetData.setReviewSystemMessage(joinWithNewLine(helpLines()));
+  }
+
+  /** The command reference, limited to what this user can run in this build. */
+  private List<String> helpLines() {
+    List<String> lines = new ArrayList<>();
+    lines.add(localizer.getText("message.command.help.title"));
+    lines.add("");
+    lines.add(localizer.getText("message.command.help.notes.detail"));
+    lines.add("");
+    for (CommandSet command : CommandSet.values()) {
+      if (!commandAvailability.isAvailable(command)) {
+        continue;
+      }
+      String key = "message.command.help." + command.name().toLowerCase(Locale.ROOT);
+      if (command == CommandSet.REVIEW && !commandAvailability.isDebugAvailable()) {
+        key += ".nodebug";
+      }
+      lines.add(localizer.getText(key));
+    }
+    lines.add("");
+    lines.add(localizer.getText("message.command.help.notes.title"));
+    if (commandAvailability.isDebugAvailable()) {
+      lines.add(localizer.getText("message.command.help.notes.debug"));
+    }
+    lines.add(localizer.getText("message.command.help.notes.message"));
+    return lines;
+  }
+
+  /** Lets the parser pass the user's role; without it /help assumes a plain user. */
+  void setCommandAvailability(CommandAvailability commandAvailability) {
+    this.commandAvailability = commandAvailability;
   }
 
   private CommandSet parseHelpTarget(String input) {
@@ -167,6 +185,16 @@ public class ClientCommandExecutor extends ClientCommandBase {
   }
 
   private String getSingleCommandHelpMessage(CommandSet command) {
+    if (commandAvailability.isDevBuildRequired(command)) {
+      return SystemMessageFormatter.getLocalizedWarningMessage(
+          localizer, "message.command.dev.build.required");
+    }
+    Optional<AiRole> deniedRole = commandAvailability.deniedRole(command);
+    if (deniedRole.isPresent()) {
+      return SystemMessageFormatter.getPrefixedSystemMessage(
+          localizer, localizer.getText(deniedRole.get().requiredMessageKey()));
+    }
+    boolean debug = commandAvailability.isDebugAvailable();
     return switch (command) {
       case HELP ->
           joinWithNewLine(
@@ -189,9 +217,11 @@ public class ClientCommandExecutor extends ClientCommandBase {
               List.of(
                   String.format(localizer.getText("message.command.help.command.title"), "/review"),
                   "",
-                  localizer.getText("message.command.help.command.review.syntax"),
+                  localizer.getText(
+                      "message.command.help.command.review.syntax" + (debug ? "" : ".nodebug")),
                   localizer.getText("message.command.help.command.review.description"),
-                  localizer.getText("message.command.help.command.review.options")));
+                  localizer.getText(
+                      "message.command.help.command.review.options" + (debug ? "" : ".nodebug"))));
       case SUGGEST ->
           joinWithNewLine(
               List.of(

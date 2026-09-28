@@ -171,6 +171,7 @@ public class ClientCommandParser extends ClientCommandBase {
             reviewConcernPublisher,
             reviewFeedbackPublisher,
             commandExtension);
+    this.clientCommandExecutor.setCommandAvailability(CommandAvailability.of(this.userRole));
     log.debug("ClientCommandParser initialized.");
   }
 
@@ -306,9 +307,7 @@ public class ClientCommandParser extends ClientCommandBase {
 
   private boolean devBuildRequired(CommandSet command) {
     return PluginBuild.isProductionBuild()
-        && (command == CommandSet.CONFIGURE
-            || command == CommandSet.DIRECTIVES
-            || command == CommandSet.SHOW
+        && (CommandAvailability.DEV_BUILD_COMMANDS.contains(command)
             || command == CommandSet.REVIEW && baseOptions.containsKey(BaseOptionSet.DEBUG));
   }
 

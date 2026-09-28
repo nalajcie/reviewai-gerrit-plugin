@@ -515,14 +515,16 @@ public class CommandTest extends OpenAiLangChainReviewTestBase {
     Assert.assertTrue(systemMessage.contains("`/help <command>`"));
     Assert.assertTrue(systemMessage.contains("`/help`"));
     Assert.assertTrue(systemMessage.contains("`/message <text>`"));
+    // The commenter is not an AI administrator: admin-only commands and --debug are not listed.
     Assert.assertTrue(
         systemMessage.contains(
-            "`/review [--topic] [--scope=patchset|commit_message] [--filter=true|false] [--debug]`"));
+            "`/review [--topic] [--scope=patchset|commit_message] [--filter=true|false]`:"));
     Assert.assertTrue(
         systemMessage.contains("`/suggest [--scope=patchset|commit_message]`"));
-    Assert.assertTrue(
-        systemMessage.contains(
-            "`/configure`, `/directives`, and `/show`, plus the `--debug` option on review commands, require the Development build and membership in the Gerrit Administrator group"));
+    Assert.assertFalse(systemMessage.contains("[--debug]"));
+    Assert.assertFalse(systemMessage.contains("`/configure"));
+    Assert.assertFalse(systemMessage.contains("`/show"));
+    Assert.assertFalse(systemMessage.contains("require the Development build"));
   }
 
   @Test
@@ -546,7 +548,8 @@ public class CommandTest extends OpenAiLangChainReviewTestBase {
     Assert.assertTrue(systemMessage.contains("HELP FOR `/review`"));
     Assert.assertTrue(
         systemMessage.contains(
-            "`/review [--topic] [--scope=patchset|commit_message] [--filter=true|false] [--debug]`"));
+            "`/review [--topic] [--scope=patchset|commit_message] [--filter=true|false]`"));
+    Assert.assertFalse(systemMessage.contains("[--debug]"));
     Assert.assertTrue(systemMessage.contains("Triggers a review of the full Change Set"));
   }
 
