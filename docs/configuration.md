@@ -390,6 +390,22 @@ commitMessageDirective = "A ticket trailer (for example Bug: 123) is required."
       tree, searching references, and reading file content.
     - **NONE**: Does not expose repository context tools. Reviews and interactions rely on the formatted patch and
       Gerrit discussion history only.
+- `codeContextProject`: Repeatable. Additional repositories that the ON_DEMAND tools can read, as
+  `<project>[:<ref>]`. The ref defaults to `refs/heads/master`; a bare branch name is expanded to `refs/heads/<branch>`.
+  Each project is resolved once per review to the commit its ref points to and exposed read-only under the path prefix
+  `reviewai-context/<project>/`: `tree` lists it (at most 2000 entries), `get_content` reads text files up to 512 KiB,
+  and `grep` searches it when its `path` argument points into it (at most 5000 files and 200 matches). Binary files,
+  Git LFS pointers, submodules and larger files are skipped. A project is exposed only when the Gerrit AI user can read
+  the ref; other entries are skipped with a warning in the log. The files are marked as not part of the change, and the
+  AI is told never to comment on them. Use it for shared headers, coding standards or specifications that reviews
+  should be able to consult. Values from `gerrit.config` and from the project configuration are combined; within the
+  project hierarchy, the nearest project that sets the key replaces the values of its parents. Has no effect with
+  `codeContextPolicy = NONE`.
+
+```
+codeContextProject = shared/coding-standards
+codeContextProject = platform/headers:release-2.0
+```
 - `aiMaxConcurrentRequests`: Maximum number of concurrent requests sent to AI models across review workflows. The
   default value is `0`, which means unlimited. See
   [AI Request Coordination](architecture/request-coordination.md#concurrency-boundaries) for the distinction between
