@@ -616,10 +616,15 @@ public class SpecializedReviewCollectorsTest {
   }
 
   private static class RecordingCollectorClient extends LangChainSpecializedAgentReviewClient {
-    private final List<ReviewAssistantStage> stages = new ArrayList<>();
-    private final List<String> inputs = new ArrayList<>();
-    private final List<String> verificationInputs = new ArrayList<>();
-    private final List<String> verificationConversationSuffixes = new ArrayList<>();
+    // Stages run in parallel: the lists are appended from several threads.
+    private final List<ReviewAssistantStage> stages =
+        java.util.Collections.synchronizedList(new ArrayList<>());
+    private final List<String> inputs =
+        java.util.Collections.synchronizedList(new ArrayList<>());
+    private final List<String> verificationInputs =
+        java.util.Collections.synchronizedList(new ArrayList<>());
+    private final List<String> verificationConversationSuffixes =
+        java.util.Collections.synchronizedList(new ArrayList<>());
     private String verificationInput;
     private ReviewAssistantStage failingStage;
     private boolean historicalRepeated;
