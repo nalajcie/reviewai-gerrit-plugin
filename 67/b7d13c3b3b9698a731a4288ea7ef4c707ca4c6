@@ -1,0 +1,39 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/api/gerrit/GerritClientPatchSet.java
+  s_87eb29ce0b3b15::t_2c94610eefb9c5 45,110-130,132,143-149
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/api/gerrit/GerritClientPatchSetReviewAi.java
+  s_87eb29ce0b3b15::t_e7ec025f618c07 93-96
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/model/data/ChangeSetData.java
+  s_87eb29ce0b3b15::t_144b7e4be0ea2f 73-76,184
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainSuggestData.java
+  s_87eb29ce0b3b15::t_78a953caeedce8 30
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/agents/level1/CommitMessageReplies.java
+  s_87eb29ce0b3b15::t_ff8e0b2171de75 1-81
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/agents/level1/LangChainMultiAgentReviewClient.java
+  s_87eb29ce0b3b15::t_6ae34cf2a0ac02 282-283,285-298
+src/main/java/com/googlesource/gerrit/plugins/reviewai/review/topic/TopicReviewReplyMapper.java
+  s_87eb29ce0b3b15::t_6693650879d315 34,36-37
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/api/gerrit/GerritClientPatchSetReviewAiTest.java
+  s_87eb29ce0b3b15::t_bced650640d7cb 150-227
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/agents/level1/CommitMessageRepliesTest.java
+  s_87eb29ce0b3b15::t_ee65fdc4d45db4 1-75
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/agents/level1/LangChainMultiAgentReviewClientTest.java
+  s_87eb29ce0b3b15::t_302b99e97f62a7 116-161
+src/test/java/com/googlesource/gerrit/plugins/reviewai/review/topic/TopicReviewReplyMapperTest.java
+  s_87eb29ce0b3b15::t_d7deafaf1f162f 1-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "67b7d13c3b3b9698a731a4288ea7ef4c707ca4c6",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
