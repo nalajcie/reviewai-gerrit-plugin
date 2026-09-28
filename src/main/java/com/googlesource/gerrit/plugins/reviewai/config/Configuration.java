@@ -103,6 +103,7 @@ public class Configuration extends ConfigCore {
   private static final int DEFAULT_AI_MAX_TOOL_RESPONSE_ROUNDS = 3;
   private static final int DEFAULT_TOPIC_PATCH_SET_WAIT_MS = 3000;
   private static final String DEFAULT_TOPIC_REVIEW_SCOPE = "PROJECT_BRANCH";
+  private static final String DEFAULT_CODE_CONTEXT_SEARCH_SCOPE = "CHANGED_FILES";
   private static final boolean DEFAULT_AI_PROVIDER_ZDR = false;
   private static final int DEFAULT_OLLAMA_CONTEXT_WINDOW = 16384;
   private static final int DEFAULT_OLLAMA_RESPONSE_LENGTH = -1;
@@ -179,6 +180,7 @@ public class Configuration extends ConfigCore {
   private static final String KEY_AI_MAX_TOOL_RESPONSE_ROUNDS = "aiMaxToolResponseRounds";
   private static final String KEY_TOPIC_PATCH_SET_WAIT_MS = "topicPatchSetWaitMs";
   private static final String KEY_TOPIC_REVIEW_SCOPE = "topicReviewScope";
+  private static final String KEY_CODE_CONTEXT_SEARCH_SCOPE = "codeContextSearchScope";
   private static final String KEY_AI_PROVIDER_ZDR = "aiProviderZdr";
   private static final String KEY_OLLAMA_CONTEXT_WINDOW = "ollamaContextWindow";
   private static final String KEY_OLLAMA_DOMAIN = "ollamaDomain";
@@ -207,6 +209,14 @@ public class Configuration extends ConfigCore {
   public enum TopicReviewScope {
     PROJECT_BRANCH,
     SUBMITTED_TOGETHER
+  }
+
+  /** What the on-demand grep and tree tools cover (get_content can always open any file). */
+  public enum CodeContextSearchScope {
+    /** Only the files changed by the patch set, as upstream. */
+    CHANGED_FILES,
+    /** The whole repository at the patch set, with bounded results. */
+    REPOSITORY
   }
 
   public String getAiToken() {
@@ -465,6 +475,13 @@ public class Configuration extends ConfigCore {
     return getEnum(KEY_TOPIC_REVIEW_SCOPE, DEFAULT_TOPIC_REVIEW_SCOPE, TopicReviewScope.class);
   }
 
+  public CodeContextSearchScope getCodeContextSearchScope() {
+    return getEnum(
+        KEY_CODE_CONTEXT_SEARCH_SCOPE,
+        DEFAULT_CODE_CONTEXT_SEARCH_SCOPE,
+        CodeContextSearchScope.class);
+  }
+
   public boolean getAiProviderZdr() {
     return getBoolean(KEY_AI_PROVIDER_ZDR, DEFAULT_AI_PROVIDER_ZDR);
   }
@@ -533,6 +550,9 @@ public class Configuration extends ConfigCore {
     }
     if (KEY_TOPIC_REVIEW_SCOPE.equals(key)) {
       return Optional.of(Arrays.stream(TopicReviewScope.values()).map(Enum::name).toList());
+    }
+    if (KEY_CODE_CONTEXT_SEARCH_SCOPE.equals(key)) {
+      return Optional.of(Arrays.stream(CodeContextSearchScope.values()).map(Enum::name).toList());
     }
     return Optional.empty();
   }

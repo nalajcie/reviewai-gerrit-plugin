@@ -33,6 +33,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerr
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.GitRepoFiles;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.CodeContextProject;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.config.Configuration.CodeContextSearchScope;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -65,6 +66,90 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   }
 
   @Test
+  public void getContentReportsBinaryFilesWithoutContent() throws Exception {
+    when(gitRepoFiles.getPatchSetFileForTool(change, "loader.stldr"))
+        .thenReturn(new GitRepoFiles.ToolFileContent("", 524288, true, false));
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(null);
+
+    assertEquals(
+        "BINARY FILE (524288 bytes): content not shown. Review its role from the files that use"
+            + " it.",
+        tools.execute("get_content", "{\"file_path\":\"loader.stldr\"}"));
+  }
+
+  @Test
+  public void getContentSaysWhenAFileIsCut() throws Exception {
+    when(gitRepoFiles.getPatchSetFileForTool(change, "big.c"))
+        .thenReturn(new GitRepoFiles.ToolFileContent("int a;", 300 * 1024, false, true));
+    when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(null);
+
+    String output = tools.execute("get_content", "{\"file_path\":\"big.c\"}");
+
+    assertTrue(output.startsWith("int a;\n\n[File truncated: showing the first 64 KB of 300 KB."));
+  }
+
+  @Test
+  public void repositoryScopeGrepSearchesTheWholeRepositoryWithBoundedOutput() throws Exception {
+    when(config.getCodeContextSearchScope()).thenReturn(CodeContextSearchScope.REPOSITORY);
+    tools = new OnDemandCodeContextTools(config, change, gitRepoFiles);
+    when(gitRepoFiles.grepPatchSetRepository(config, change, "", "def upsert"))
+        .thenReturn(new GitRepoFiles.BoundedGrep(List.of("lib/db.py:103: def upsert(cur):"), 4, false));
+
+    String output = tools.execute("grep", "{\"string\":\"def upsert\"}");
+
+    assertEquals(
+        "lib/db.py:103: def upsert(cur):\n[4 more matches not shown: at most 30 matches, 3 per"
+            + " file. Narrow the search with a longer string or a `path`.]",
+        output);
+    verify(gitRepoFiles, never()).getPatchSetChangedFiles(change);
+  }
+
+  @Test
+  public void repositoryScopeGrepReportsNoMatch() throws Exception {
+    when(config.getCodeContextSearchScope()).thenReturn(CodeContextSearchScope.REPOSITORY);
+    tools = new OnDemandCodeContextTools(config, change, gitRepoFiles);
+    when(gitRepoFiles.grepPatchSetRepository(config, change, "src", "missing"))
+        .thenReturn(new GitRepoFiles.BoundedGrep(List.of(), 0, false));
+
+    assertTrue(
+        tools
+            .execute("grep", "{\"string\":\"missing\",\"path\":\"src\"}")
+            .startsWith("No match in the repository at this patch set"));
+  }
+
+  @Test
+  public void repositoryScopeGrepWithAMemberPathSearchesOnlyThatMember() throws Exception {
+    when(config.getCodeContextSearchScope()).thenReturn(CodeContextSearchScope.REPOSITORY);
+    GerritChange coreLibs = getGerritChange();
+    tools =
+        new OnDemandCodeContextTools(
+            config, change, gitRepoFiles, Map.of("reviewai-topic-change-2/core-libs/", coreLibs));
+    when(gitRepoFiles.grepPatchSetRepository(config, coreLibs, "src", "span"))
+        .thenReturn(new GitRepoFiles.BoundedGrep(List.of("src/span.h:1: span"), 0, false));
+
+    assertEquals(
+        "reviewai-topic-change-2/core-libs/src/span.h:1: span",
+        tools.execute(
+            "grep", "{\"string\":\"span\",\"path\":\"reviewai-topic-change-2/core-libs/src\"}"));
+    verify(gitRepoFiles, never()).grepPatchSetRepository(config, change, "", "span");
+  }
+
+  @Test
+  public void repositoryScopeTreeIsNotLimitedToChangedFiles() throws Exception {
+    when(config.getCodeContextSearchScope()).thenReturn(CodeContextSearchScope.REPOSITORY);
+    tools = new OnDemandCodeContextTools(config, change, gitRepoFiles);
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null))
+        .thenReturn(List.of("changed.py", "pre_existing.py"));
+
+    assertEquals("changed.py\npre_existing.py", tools.execute("tree", "{}"));
+    verify(gitRepoFiles, never()).getPatchSetChangedFiles(change);
+  }
+
+  private static GitRepoFiles.ToolFileContent text(String content) {
+    return new GitRepoFiles.ToolFileContent(content, content.length(), false, false);
+  }
+
+  @Test
   public void treeReturnsRepositoryPathsFromSubdir() throws Exception {
     List<String> paths = readTestFileLines(SMALL_TREE_FILE);
     when(gitRepoFiles.getPatchSetFileTree(config, change, "src")).thenReturn(paths);
@@ -90,7 +175,7 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   @Test
   public void getContentReturnsFileContentFromProjectRoot() throws Exception {
     String content = readTestFile(CONTEXT_FILE);
-    when(gitRepoFiles.getPatchSetFileContent(change, "context.py")).thenReturn(content);
+    when(gitRepoFiles.getPatchSetFileForTool(change, "context.py")).thenReturn(text(content));
     when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(null);
 
     String output = tools.execute("get_content", "{\"file_path\":\"context.py\"}");
@@ -113,7 +198,7 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   @Test
   public void getContentAllowsCommitMessageFilenameInRepositorySubdirectory() throws Exception {
     String content = readTestFile(CONTEXT_FILE);
-    when(gitRepoFiles.getPatchSetFileContent(change, "docs/COMMIT_MSG")).thenReturn(content);
+    when(gitRepoFiles.getPatchSetFileForTool(change, "docs/COMMIT_MSG")).thenReturn(text(content));
     when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(null);
 
     String output = tools.execute("get_content", "{\"file_path\":\"docs/COMMIT_MSG\"}");
@@ -147,7 +232,7 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   @Test
   public void getContentMarksPreexistingFiles() throws Exception {
     String content = readTestFile(CONTEXT_FILE);
-    when(gitRepoFiles.getPatchSetFileContent(change, "context.py")).thenReturn(content);
+    when(gitRepoFiles.getPatchSetFileForTool(change, "context.py")).thenReturn(text(content));
     when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(Set.of("changed.py"));
 
     String output = tools.execute("get_content", "{\"file_path\":\"context.py\"}");
@@ -201,7 +286,7 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   public void prefixedPathsResolveToReviewGroupMemberRepository() throws Exception {
     GerritChange coreLibs = reviewGroupMember("core-libs", 11);
     OnDemandCodeContextTools groupTools = reviewGroupTools(coreLibs);
-    when(gitRepoFiles.getPatchSetFileContent(coreLibs, "src/span.h")).thenReturn("span");
+    when(gitRepoFiles.getPatchSetFileForTool(coreLibs, "src/span.h")).thenReturn(text("span"));
     when(gitRepoFiles.getPatchSetChangedFiles(coreLibs)).thenReturn(Set.of("src/span.h"));
 
     String output =
@@ -214,7 +299,7 @@ public class OnDemandCodeContextToolsTest extends TestBase {
   @Test
   public void unprefixedPathsResolveToPrimaryChangeInReviewGroup() throws Exception {
     OnDemandCodeContextTools groupTools = reviewGroupTools(reviewGroupMember("core-libs", 11));
-    when(gitRepoFiles.getPatchSetFileContent(change, "context.py")).thenReturn("primary");
+    when(gitRepoFiles.getPatchSetFileForTool(change, "context.py")).thenReturn(text("primary"));
     when(gitRepoFiles.getPatchSetChangedFiles(change)).thenReturn(null);
 
     assertEquals("primary", groupTools.execute("get_content", "{\"file_path\":\"context.py\"}"));

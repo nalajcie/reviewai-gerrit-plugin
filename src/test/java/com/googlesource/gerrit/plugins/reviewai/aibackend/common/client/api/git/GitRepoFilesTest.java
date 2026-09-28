@@ -238,6 +238,84 @@ public class GitRepoFilesTest extends TestBase {
     }
   }
 
+  @Test
+  public void repositoryGrepBoundsMatchesAndSkipsBinaryAndExcludedFiles() throws Exception {
+    try (Git git = createRepository()) {
+      Path workTree = git.getRepository().getWorkTree().toPath();
+      Files.createDirectories(workTree.resolve("src"));
+      // 5 matches in one file: 3 are kept; 12 files x 3 = 36 > 30 in total
+      for (int i = 0; i < 12; i++) {
+        Files.writeString(
+            workTree.resolve("src/f" + i + ".c"), "upsert a\nupsert b\nupsert c\nupsert d\nupsert e\n");
+      }
+      Files.writeString(workTree.resolve("long.c"), "upsert " + "x".repeat(400) + "\n");
+      Files.write(workTree.resolve("loader.c"), new byte[] {'u', 'p', 's', 'e', 'r', 't', 0, 1});
+      Files.writeString(workTree.resolve("data.json"), "upsert\n");
+      GerritChange change = commitPatchSet(git, "Many matches");
+      Configuration config = configWithExtensions("c");
+
+      GitRepoFiles.BoundedGrep all =
+          new GitRepoFiles(patchSetRepositoryManager(git))
+              .grepPatchSetRepository(config, change, null, "upsert");
+      GitRepoFiles.BoundedGrep one =
+          new GitRepoFiles(patchSetRepositoryManager(git))
+              .grepPatchSetRepository(config, change, "long.c", "upsert");
+
+      assertEquals(GitRepoFiles.REPOSITORY_GREP_MAX_MATCHES, all.matches().size());
+      assertEquals(12 * 5 + 1 - GitRepoFiles.REPOSITORY_GREP_MAX_MATCHES, all.omittedMatches());
+      assertTrue(all.matches().stream().noneMatch(m -> m.startsWith("loader.c") || m.startsWith("data.json")));
+      assertEquals(
+          GitRepoFiles.REPOSITORY_GREP_MAX_MATCHES_PER_FILE,
+          all.matches().stream().filter(m -> m.startsWith("src/f0.c:")).count());
+      assertEquals(1, one.matches().size());
+      assertTrue(one.matches().get(0).endsWith(" [...]"));
+      assertTrue(one.matches().get(0).length() <= GitRepoFiles.REPOSITORY_GREP_MAX_LINE_LENGTH + 6);
+    }
+  }
+
+  @Test
+  public void toolFileContentReportsBinaryAndCutsLargeText() throws Exception {
+    try (Git git = createRepository()) {
+      Path workTree = git.getRepository().getWorkTree().toPath();
+      Files.write(workTree.resolve("loader.stldr"), new byte[] {0x7f, 'E', 'L', 'F', 0, 0, 1});
+      Files.writeString(workTree.resolve("big.txt"), "a".repeat(GitRepoFiles.TOOL_MAX_FILE_BYTES + 100));
+      Files.writeString(workTree.resolve("small.txt"), "hello\n");
+      GerritChange change = commitPatchSet(git, "Tool files");
+      GitRepoFiles files = new GitRepoFiles(patchSetRepositoryManager(git));
+
+      GitRepoFiles.ToolFileContent binary = files.getPatchSetFileForTool(change, "loader.stldr");
+      GitRepoFiles.ToolFileContent big = files.getPatchSetFileForTool(change, "big.txt");
+      GitRepoFiles.ToolFileContent small = files.getPatchSetFileForTool(change, "small.txt");
+
+      assertTrue(binary.binary());
+      assertEquals("", binary.text());
+      assertEquals(7, binary.sizeBytes());
+      assertTrue(big.truncated());
+      assertEquals(GitRepoFiles.TOOL_MAX_FILE_BYTES, big.text().length());
+      assertEquals(new GitRepoFiles.ToolFileContent("hello\n", 6, false, false), small);
+    }
+  }
+
+  private GerritChange commitPatchSet(Git git, String message) throws Exception {
+    git.add().addFilepattern(".").call();
+    RevCommit patchSetCommit =
+        git.commit().setMessage(message).setAuthor("Test", "test@example.com").call();
+    RefUpdate patchSetRef = git.getRepository().updateRef(PATCH_SET_REF);
+    patchSetRef.setNewObjectId(patchSetCommit);
+    assertEquals(RefUpdate.Result.NEW, patchSetRef.update());
+    GerritChange change = getGerritChange();
+    change.setChangeNumber(CHANGE_NUMBER);
+    change.setPatchSetNumber(PATCH_SET_NUMBER);
+    return change;
+  }
+
+  private static GitRepositoryManager patchSetRepositoryManager(Git git) throws Exception {
+    GitRepositoryManager repositoryManager = mock(GitRepositoryManager.class);
+    when(repositoryManager.openRepository(any(Project.NameKey.class)))
+        .thenReturn(git.getRepository());
+    return repositoryManager;
+  }
+
   private static boolean allStartWith(List<String> matches, String path) {
     return matches.stream().allMatch(match -> match.startsWith(path + ":"));
   }

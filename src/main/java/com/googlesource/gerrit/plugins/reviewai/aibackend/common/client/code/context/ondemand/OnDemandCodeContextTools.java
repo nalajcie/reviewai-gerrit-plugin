@@ -26,6 +26,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerr
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.git.GitRepoFiles;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.CodeContextProject;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.config.Configuration.CodeContextSearchScope;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -64,8 +65,22 @@ public class OnDemandCodeContextTools extends ClientBase {
   private static final Pattern COMMIT_MESSAGE_PATH_PATTERN =
       Pattern.compile("^(?:reviewai-topic-change-.*)?/?COMMIT_MSG$");
   private static final int LOG_MAX_CONTENT_SIZE = 256;
+  private static final String NO_MATCH_IN_REPOSITORY =
+      "No match in the repository at this patch set (file types excluded from review and"
+          + " binary files are not searched).";
+  private static final String REPOSITORY_GREP_OMITTED =
+      "[%d more matches not shown: at most %d matches, %d per file. Narrow the search with a"
+          + " longer string or a `path`.]";
+  private static final String REPOSITORY_GREP_FILE_LIMIT =
+      "[Search stopped after %d files. Narrow it with a `path`.]";
+  private static final String BINARY_FILE =
+      "BINARY FILE (%d bytes): content not shown. Review its role from the files that use it.";
+  private static final String TRUNCATED_FILE =
+      "\n\n[File truncated: showing the first %d KB of %d KB. Use grep with a string from the"
+          + " part you need to locate it.]";
 
   private final GerritChange change;
+  private final CodeContextSearchScope searchScope;
   private final GitRepoFiles gitRepoFiles;
   private final TreeOutputCompressor treeOutputCompressor;
   private final Map<String, GerritChange> reviewGroupChangesByPrefix;
@@ -103,6 +118,8 @@ public class OnDemandCodeContextTools extends ClientBase {
     super(config);
     this.codeContextProjects = codeContextProjects == null ? List.of() : codeContextProjects;
     this.change = change;
+    CodeContextSearchScope scope = config == null ? null : config.getCodeContextSearchScope();
+    this.searchScope = scope == null ? CodeContextSearchScope.CHANGED_FILES : scope;
     this.gitRepoFiles = gitRepoFiles;
     this.treeOutputCompressor = new TreeOutputCompressor();
     this.reviewGroupChangesByPrefix =
@@ -201,7 +218,12 @@ public class OnDemandCodeContextTools extends ClientBase {
       codeContextProjects.forEach(project -> lines.add(project.prefix() + "..."));
       output = String.join("\n", lines);
     }
-    return output.isEmpty() ? NO_CHANGED_FILES_BELOW : output;
+    if (output.isEmpty()) {
+      return searchScope == CodeContextSearchScope.REPOSITORY
+          ? CONTEXT_NOT_PROVIDED
+          : NO_CHANGED_FILES_BELOW;
+    }
+    return output;
   }
 
   private String contextTree(ContextPath contextPath) {
@@ -229,7 +251,10 @@ public class OnDemandCodeContextTools extends ClientBase {
     if (paths == null || paths.isEmpty()) {
       return List.of();
     }
-    Set<String> changed = changedFiles(resolvedPath.change());
+    Set<String> changed =
+        searchScope == CodeContextSearchScope.REPOSITORY
+            ? null
+            : changedFiles(resolvedPath.change());
     if (changed != null) {
       paths = paths.stream().filter(changed::contains).toList();
     }
@@ -254,8 +279,19 @@ public class OnDemandCodeContextTools extends ClientBase {
     if (resolvedPath.path().isBlank()) {
       return CONTEXT_NOT_PROVIDED;
     }
-    String content =
-        gitRepoFiles.getPatchSetFileContent(resolvedPath.change(), resolvedPath.path());
+    GitRepoFiles.ToolFileContent file =
+        gitRepoFiles.getPatchSetFileForTool(resolvedPath.change(), resolvedPath.path());
+    String content;
+    if (file.binary()) {
+      content = String.format(BINARY_FILE, file.sizeBytes());
+    } else if (file.truncated()) {
+      content =
+          file.text()
+              + String.format(
+                  TRUNCATED_FILE, GitRepoFiles.TOOL_MAX_FILE_BYTES / 1024, file.sizeBytes() / 1024);
+    } else {
+      content = file.text();
+    }
     Set<String> changed = changedFiles(resolvedPath.change());
     if (changed != null && !changed.contains(resolvedPath.path())) {
       return PREEXISTING_CONTEXT_MARKER + content;
@@ -278,6 +314,8 @@ public class OnDemandCodeContextTools extends ClientBase {
       gitRepoFiles
           .grepRepository(project.project(), project.commitId(), contextPath.get().path(), string)
           .forEach(match -> matches.add(project.prefix() + match));
+    } else if (searchScope == CodeContextSearchScope.REPOSITORY) {
+      return grepRepository(string, path);
     } else {
       matches.addAll(grep(resolve(null), string));
       for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
@@ -294,6 +332,50 @@ public class OnDemandCodeContextTools extends ClientBase {
       return contextPath.isPresent() ? CONTEXT_NOT_PROVIDED : NOT_FOUND_IN_CHANGED_FILES;
     }
     return String.join("\n", matches);
+  }
+
+  private String grepRepository(String string, String path) throws IOException {
+    List<ResolvedPath> targets = new ArrayList<>();
+    if (path != null && !path.isBlank()) {
+      targets.add(resolve(path));
+    } else {
+      targets.add(resolve(null));
+      for (Map.Entry<String, GerritChange> member : reviewGroupChangesByPrefix.entrySet()) {
+        if (member.getValue() != change) {
+          targets.add(new ResolvedPath(member.getValue(), member.getKey(), ""));
+        }
+      }
+    }
+    List<String> lines = new ArrayList<>();
+    int omitted = 0;
+    boolean fileLimitReached = false;
+    for (ResolvedPath target : targets) {
+      GitRepoFiles.BoundedGrep result =
+          gitRepoFiles.grepPatchSetRepository(
+              config, target.change(), target.path() == null ? "" : target.path(), string);
+      int room = GitRepoFiles.REPOSITORY_GREP_MAX_MATCHES - lines.size();
+      List<String> matches = result.matches();
+      matches.stream().limit(Math.max(0, room)).forEach(m -> lines.add(target.prefix() + m));
+      omitted += result.omittedMatches() + Math.max(0, matches.size() - Math.max(0, room));
+      fileLimitReached |= result.fileLimitReached();
+    }
+    if (lines.isEmpty() && omitted == 0) {
+      return fileLimitReached
+          ? String.format(REPOSITORY_GREP_FILE_LIMIT, GitRepoFiles.CONTEXT_MAX_GREP_FILES)
+          : NO_MATCH_IN_REPOSITORY;
+    }
+    if (omitted > 0) {
+      lines.add(
+          String.format(
+              REPOSITORY_GREP_OMITTED,
+              omitted,
+              GitRepoFiles.REPOSITORY_GREP_MAX_MATCHES,
+              GitRepoFiles.REPOSITORY_GREP_MAX_MATCHES_PER_FILE));
+    }
+    if (fileLimitReached) {
+      lines.add(String.format(REPOSITORY_GREP_FILE_LIMIT, GitRepoFiles.CONTEXT_MAX_GREP_FILES));
+    }
+    return String.join("\n", lines);
   }
 
   private List<String> grep(ResolvedPath resolvedPath, String string) {

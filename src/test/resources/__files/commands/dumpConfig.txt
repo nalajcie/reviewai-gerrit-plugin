@@ -32,6 +32,7 @@ aiSystemPromptInstructions: Act as a PatchSet Reviewer
 aiUploadedChunkSizeMb: 5
 codeContextPolicy: ON_DEMAND
 codeContextProject:
+codeContextSearchScope: CHANGED_FILES
 commitMessageDirective:
 convertNeutralReviewScoreToPositive: true
 directive:

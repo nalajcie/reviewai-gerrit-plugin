@@ -199,6 +199,132 @@ public class GitRepoFiles {
     }
   }
 
+  /** Maximum number of matches the repository-wide patch set grep returns. */
+  public static final int REPOSITORY_GREP_MAX_MATCHES = 30;
+
+  /** Maximum number of matches per file in the repository-wide patch set grep. */
+  public static final int REPOSITORY_GREP_MAX_MATCHES_PER_FILE = 3;
+
+  /** Matching lines longer than this are cut in the repository-wide patch set grep. */
+  public static final int REPOSITORY_GREP_MAX_LINE_LENGTH = 160;
+
+  /** Maximum part of a file that the get_content tool returns. */
+  public static final int TOOL_MAX_FILE_BYTES = 64 * 1024;
+
+  /** Matches of a bounded search, and how many more matches there were. */
+  public record BoundedGrep(List<String> matches, int omittedMatches, boolean fileLimitReached) {}
+
+  /**
+   * Searches the text files of the repository at the change's patch set, below {@code subdir} when
+   * given, for a literal string. Unlike {@link #grepPatchSet} it is not limited to the changed
+   * files, so the output is bounded: {@link #REPOSITORY_GREP_MAX_MATCHES} matches, {@link
+   * #REPOSITORY_GREP_MAX_MATCHES_PER_FILE} per file, lines cut at {@link
+   * #REPOSITORY_GREP_MAX_LINE_LENGTH}, at most {@link #CONTEXT_MAX_GREP_FILES} files searched.
+   * Binary, LFS and files above {@link #CONTEXT_MAX_FILE_BYTES} are skipped, as are file types
+   * the configuration excludes.
+   */
+  public BoundedGrep grepPatchSetRepository(
+      Configuration config, GerritChange change, String subdir, String searchString)
+      throws IOException {
+    if (searchString == null || searchString.isEmpty()) {
+      return new BoundedGrep(List.of(), 0, false);
+    }
+    FileSelection selection = FileSelection.from(config);
+    String normalizedSubdir = normalizePath(subdir);
+    return withRepositoryTreeReader(
+        change,
+        this::getPatchSetRevTree,
+        (repository, tree, reader) -> {
+          List<String> matches = new ArrayList<>();
+          int omitted = 0;
+          int searchedFiles = 0;
+          try (TreeWalk treeWalk = newRecursiveTreeWalk(repository, tree, normalizedSubdir)) {
+            while (treeWalk.next()) {
+              String path = treeWalk.getPathString();
+              if (!selection.accepts(path)) {
+                continue;
+              }
+              if (searchedFiles >= CONTEXT_MAX_GREP_FILES) {
+                return new BoundedGrep(matches, omitted, true);
+              }
+              String content = readContextFile(reader, treeWalk);
+              if (content == null) {
+                continue;
+              }
+              searchedFiles++;
+              List<String> fileMatches = new ArrayList<>();
+              addGrepMatches(fileMatches, path, content, searchString);
+              for (int i = 0; i < fileMatches.size(); i++) {
+                if (i < REPOSITORY_GREP_MAX_MATCHES_PER_FILE
+                    && matches.size() < REPOSITORY_GREP_MAX_MATCHES) {
+                  matches.add(cutLine(fileMatches.get(i)));
+                } else {
+                  omitted++;
+                }
+              }
+            }
+          }
+          return new BoundedGrep(matches, omitted, false);
+        });
+  }
+
+  private static String cutLine(String line) {
+    return line.length() <= REPOSITORY_GREP_MAX_LINE_LENGTH
+        ? line
+        : line.substring(0, REPOSITORY_GREP_MAX_LINE_LENGTH) + " [...]";
+  }
+
+  /** A file of the patch set as the get_content tool returns it. */
+  public record ToolFileContent(String text, long sizeBytes, boolean binary, boolean truncated) {}
+
+  /**
+   * Reads a file of the patch set for the get_content tool: binary and LFS files are reported
+   * without their content, text beyond {@link #TOOL_MAX_FILE_BYTES} is cut. A binary loader file
+   * (about 500 KB) once put 155k tokens into every later request of a review.
+   */
+  public ToolFileContent getPatchSetFileForTool(GerritChange change, String path)
+      throws FileNotFoundException {
+    try {
+      ToolFileContent content =
+          withRepositoryTreeReader(
+              change,
+              this::getPatchSetRevTree,
+              (repository, tree, reader) -> {
+                try (TreeWalk treeWalk = TreeWalk.forPath(reader, path, tree)) {
+                  if (treeWalk == null) {
+                    return null;
+                  }
+                  ObjectLoader loader = reader.open(treeWalk.getObjectId(0));
+                  long size = loader.getSize();
+                  byte[] bytes =
+                      size <= TOOL_MAX_FILE_BYTES
+                          ? loader.getBytes()
+                          : readPrefix(loader, TOOL_MAX_FILE_BYTES);
+                  if (RawText.isBinary(bytes)) {
+                    return new ToolFileContent("", size, true, false);
+                  }
+                  String text = new String(bytes, StandardCharsets.UTF_8);
+                  if (text.startsWith(LFS_POINTER_PREFIX)) {
+                    return new ToolFileContent("", size, true, false);
+                  }
+                  return new ToolFileContent(text, size, false, size > TOOL_MAX_FILE_BYTES);
+                }
+              });
+      if (content == null) {
+        throw new FileNotFoundException("Error retrieving file at " + path);
+      }
+      return content;
+    } catch (IOException e) {
+      throw new FileNotFoundException("File not found: " + path);
+    }
+  }
+
+  private static byte[] readPrefix(ObjectLoader loader, int maxBytes) throws IOException {
+    try (java.io.InputStream in = loader.openStream()) {
+      return in.readNBytes(maxBytes);
+    }
+  }
+
   /**
    * Searches the text files of a project at a commit, below {@code subdir} when given, for a
    * literal string. The search is bounded by {@link #CONTEXT_MAX_GREP_FILES} and {@link

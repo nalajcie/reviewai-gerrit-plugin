@@ -58,6 +58,7 @@ import com.googlesource.gerrit.plugins.reviewai.localization.Localizer;
 import com.googlesource.gerrit.plugins.reviewai.metrics.ReviewAiMetrics;
 import com.googlesource.gerrit.plugins.reviewai.metrics.cost.AiCostTracker;
 import com.googlesource.gerrit.plugins.reviewai.settings.AiProviderType;
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.context.ondemand.OnDemandCodeContextTools;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -208,6 +209,7 @@ public class LangChainClient extends AiClientBase implements IAiClient {
                   resource ->
                       new LangChainToolSpecificationFactory(resource).loadToolSpecification())
               .filter(toolSpecification -> toolSpecification != null)
+              .map(toolSpecification -> withSearchScope(toolSpecification, config))
               .toList();
     }
     this.contextTools = contextTools;
@@ -802,6 +804,36 @@ public class LangChainClient extends AiClientBase implements IAiClient {
       return requestDataPrompt;
     }
     return prompt.getDefaultAiThreadReviewMessage("");
+  }
+
+  /** Tells the model which files grep and tree cover (codeContextSearchScope). */
+  static ToolSpecification withSearchScope(ToolSpecification tool, Configuration config) {
+    boolean repository =
+        config.getCodeContextSearchScope() == Configuration.CodeContextSearchScope.REPOSITORY;
+    String scope =
+        switch (tool.name()) {
+          case OnDemandCodeContextTools.GREP ->
+              repository
+                  ? "Scope: all text files of the repository at this patch set. Results are"
+                      + " bounded (at most 30 matches, 3 per file, long lines cut); use a specific"
+                      + " string or `path` for common words."
+                  : "Scope: ONLY the files changed by this patch set, not the rest of the"
+                      + " repository. To read another file, call get_content with its path.";
+          case OnDemandCodeContextTools.TREE ->
+              repository
+                  ? "Scope: the whole repository at this patch set."
+                  : "Scope: ONLY the files changed by this patch set, not the rest of the"
+                      + " repository.";
+          default -> null;
+        };
+    if (scope == null) {
+      return tool;
+    }
+    return ToolSpecification.builder()
+        .name(tool.name())
+        .description(scope + " " + tool.description())
+        .parameters(tool.parameters())
+        .build();
   }
 
   protected ChatMemory buildMemory(Object memoryId) {
