@@ -47,10 +47,6 @@ public class GerritCommentRange {
       log.debug("Filename is null, skipping code range extraction.");
       return gerritCommentRange;
     }
-    if (replyItem.getCodeSnippet() == null) {
-      log.info("CodeSnippet is null in reply '{}'.", replyItem);
-      return gerritCommentRange;
-    }
     if (!fileDiffsProcessed.containsKey(filename)) {
       log.info(
           "Filename '{}' not found for reply '{}'.\nFileDiffsProcessed = {}",
@@ -59,8 +55,14 @@ public class GerritCommentRange {
           fileDiffsProcessed);
       return gerritCommentRange;
     }
+    // A commit-message reply is anchored to the whole message, with or without a code snippet:
+    // the prompt tells the model to omit the snippet when no single line applies.
     if (filename.equals("/COMMIT_MSG")) {
       return fileDiffsProcessed.get(filename).getCommitMessageRange();
+    }
+    if (replyItem.getCodeSnippet() == null) {
+      log.info("CodeSnippet is null in reply '{}'.", replyItem);
+      return gerritCommentRange;
     }
     InlineCode inlineCode = new InlineCode(fileDiffsProcessed.get(filename));
     gerritCommentRange = inlineCode.findCommentRange(replyItem);
