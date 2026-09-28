@@ -1,0 +1,21 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/patch/filename/FilenameSanitizer.java
+  s_87eb29ce0b3b15::t_1a574c3f155a7b 28-29,45-51
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/patch/filename/FilenameSanitizerTest.java
+  s_87eb29ce0b3b15::t_16de03651ac607 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "17db83668b7527a7a85460116b35ada0b0564254",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
