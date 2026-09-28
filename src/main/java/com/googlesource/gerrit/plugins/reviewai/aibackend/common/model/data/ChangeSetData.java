@@ -31,6 +31,7 @@ import java.util.List;
 import com.googlesource.gerrit.plugins.reviewai.metrics.cost.AiUsageSummary;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import lombok.Data;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -81,6 +82,8 @@ public class ChangeSetData {
   private transient String reviewGroupHeader;
   // Tells the user why a group review covered less than they asked for; shown in the message.
   private transient String reviewScopeNote;
+  // Receives notes for the Review Agent panel while the review runs (the pending request's notice)
+  private transient Consumer<String> reviewProgressListener;
   // Read-only repositories exposed to the on-demand code context tools, resolved once per review.
   private transient List<CodeContextProject> codeContextProjects = List.of();
 
@@ -98,6 +101,12 @@ public class ChangeSetData {
   private String reviewRepeatedCommentsMessage;
   private Set<String> parsedCommands = new HashSet<>();
   private Map<String, Map<String, String>> parsedCommandOptions = new HashMap<>();
+
+  public void reportProgress(String note) {
+    if (reviewProgressListener != null && note != null) {
+      reviewProgressListener.accept(note);
+    }
+  }
 
   public void setReviewSystemMessage(String reviewSystemMessage) {
     this.reviewSystemMessage = reviewSystemMessage;
@@ -188,6 +197,7 @@ public class ChangeSetData {
     copy.setReviewGroupChangesByPrefix(reviewGroupChangesByPrefix);
     copy.setReviewGroupHeader(reviewGroupHeader);
     copy.setReviewScopeNote(reviewScopeNote);
+    copy.setReviewProgressListener(reviewProgressListener);
     copy.setSuggestionReviewPass(suggestionReviewPass);
     copy.setCodeContextProjects(codeContextProjects);
     copy.setForcedReview(forcedReview);

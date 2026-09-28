@@ -131,6 +131,24 @@ class ReviewAgentEventRequestStatusUpdater {
               localizer, changeSetData.getReviewSystemMessage()));
     }
 
+    /** Tells the waiting panel something about the running request. */
+    void notice(String text) {
+      if (requestId.isEmpty()) {
+        return;
+      }
+      resolveRequestId().ifPresent(id -> statusStore.notice(id, text));
+    }
+
+    /** The review was dropped for a newer patch set: say so instead of "no update". */
+    void completeSuperseded() {
+      if (requestId.isEmpty()) {
+        return;
+      }
+      complete(
+          SystemMessageFormatter.getLocalizedWarningMessage(
+              localizer, "message.review.superseded.rerun"));
+    }
+
     void fail(String responseText) {
       resolveRequestId().ifPresent(id -> statusStore.failed(id, responseText));
     }

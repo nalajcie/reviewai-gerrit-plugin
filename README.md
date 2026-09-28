@@ -21,7 +21,8 @@
 | tool budget | Every tool result tells the model how many tool rounds are left; calls past `aiMaxToolResponseRounds` are rejected with a request for the final answer. If that brings more tool calls or an empty reply, the model is asked again (twice at most) in a fresh request without tools that carries the tool results as text. On Gemini 3 these final-answer requests use `thinking_level=LOW`. Always on. |
 | Review Agent action | "Review With Related Changes" runs `/review --topic`; its hover text shows the `maxReviewLines` limit. |
 | `/help` | Lists only the commands the user can run in this build and role. |
-| Review Agent chat | Waits up to 10 minutes for an answer (was 2). An answer that is still running when the panel stops waiting is filled in when the conversation is opened again. |
+| Review Agent chat | Waits up to 10 minutes for an answer (was 2). An answer that is still running when the panel stops waiting is filled in when the conversation is opened again. A note from the running review (a group review limited to this change) is shown at once; a review dropped for a newer patch set says so. |
+| review without comments | Says what was reviewed and on which patch set ("ReviewAI reviewed the code and the commit message of patch set 11 and found no new issues."), instead of "No update to show for this Change Set", so nobody requests the same review again. |
 | group review over `maxReviewLines` | When a review group is reduced to the triggering change, the review message says so, with the group's size and the limit. |
 | Maven dev build | `mvn -Pdev package` builds the development variant (`DevModule`: `/show`, `/directives`, `/configure`, `--debug`). |
 

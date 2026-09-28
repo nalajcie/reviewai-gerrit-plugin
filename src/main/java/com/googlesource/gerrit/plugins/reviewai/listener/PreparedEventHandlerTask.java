@@ -133,6 +133,7 @@ final class PreparedEventHandlerTask {
         metrics.startReviewRun(change.getEventType(), change.getProjectName());
     AiRequestCancellation cancellation = AiRequestCancellation.current();
     changeSetData.setAiRequestCancellation(cancellation);
+    changeSetData.setReviewProgressListener(pendingRequest::notice);
     try (AiRequestCancellation.Work ignored = cancellation.beginWork()) {
       cancellation.throwIfSupersessionRequested();
       log.debug("Processing event for change ID:: {}", change.getFullChangeId());
@@ -145,7 +146,7 @@ final class PreparedEventHandlerTask {
           "Skipping superseded patch set review for {}: {}",
           change.getFullChangeId(),
           e.getMessage());
-      pendingRequest.completeNoUpdate();
+      pendingRequest.completeSuperseded();
       return Result.SUPERSEDED;
     } catch (Exception e) {
       reviewRunTimer.fail();

@@ -166,6 +166,7 @@ class TopicPatchSetReviewer {
               patchSets.size(),
               mergedPatchSetLines,
               config.getMaxReviewLines()));
+      changeSetData.reportProgress(changeSetData.getReviewScopeNote());
       try {
         reviewSingleGroupMember(
             members, patchSets, singleReviewedChange, includeAiFailureDetails);

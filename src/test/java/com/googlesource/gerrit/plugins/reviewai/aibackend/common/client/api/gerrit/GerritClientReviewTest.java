@@ -44,6 +44,7 @@ import com.google.gerrit.json.OutputFormat;
 import com.googlesource.gerrit.plugins.reviewai.TestResourceLoader;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.api.ai.AiResponseContent;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.ConcernStatus;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.PendingReviewConcernUpdates;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.ReviewBatch;
@@ -149,6 +150,52 @@ public class GerritClientReviewTest {
     ArgumentCaptor<ReviewInput> reviewInputCaptor = ArgumentCaptor.forClass(ReviewInput.class);
     verify(revisionApi).review(reviewInputCaptor.capture());
     assertTrue(reviewInputCaptor.getValue().message.contains("Only this change was reviewed."));
+  }
+
+  @Test
+  public void reviewWithoutCommentsSaysWhatWasReviewed() throws Exception {
+    stubNoIssuesTexts();
+    when(config.getAiReviewCommitMessages()).thenReturn(true);
+    change.setPatchSetNumber(11);
+
+    client.setReview(change, List.of(), changeSetData);
+
+    assertTrue(
+        capturedMessage()
+            .contains("Reviewed the code and the commit message of patch set 11: no new issues."));
+  }
+
+  @Test
+  public void patchSetReviewWithoutCommentsNamesTheCode() throws Exception {
+    stubNoIssuesTexts();
+    change.setPatchSetNumber(4);
+    changeSetData.setReviewScope(ReviewScope.PATCHSET);
+
+    client.setReview(change, List.of(), changeSetData);
+
+    assertTrue(capturedMessage().contains("Reviewed the code of patch set 4: no new issues."));
+  }
+
+  @Test
+  public void chatReplyWithoutContentKeepsTheGenericMessage() throws Exception {
+    when(localizer.getText("message.empty.review")).thenReturn("No update to show");
+    change.setIsCommentEvent(true);
+
+    client.setReview(change, List.of(), changeSetData);
+
+    assertTrue(capturedMessage().contains("No update to show"));
+  }
+
+  private void stubNoIssuesTexts() {
+    when(localizer.getText("message.review.no.issues")).thenReturn("Reviewed %s of patch set %s: no new issues.");
+    lenient().when(localizer.getText("message.review.no.issues.full")).thenReturn("the code and the commit message");
+    lenient().when(localizer.getText("message.review.no.issues.code")).thenReturn("the code");
+  }
+
+  private String capturedMessage() throws Exception {
+    ArgumentCaptor<ReviewInput> reviewInputCaptor = ArgumentCaptor.forClass(ReviewInput.class);
+    verify(revisionApi).review(reviewInputCaptor.capture());
+    return reviewInputCaptor.getValue().message;
   }
 
   @Test

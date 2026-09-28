@@ -366,7 +366,7 @@ public class CommandTest extends OpenAiLangChainReviewTestBase {
 
     ArgumentCaptor<ReviewInput> captor = testRequestSent();
     Assert.assertEquals(
-        readTestFile("__files/commands/noUpdateSystemMessage.txt").stripTrailing(),
+        readTestFile("__files/commands/noIssuesSystemMessage.txt").stripTrailing(),
         captor.getValue().message);
     Assert.assertNull(captor.getValue().comments);
   }

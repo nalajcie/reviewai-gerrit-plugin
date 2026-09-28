@@ -158,6 +158,8 @@ public class ReviewGroupReviewerTest {
         .thenReturn("Only this change: %d changes, %d lines, limit %d");
     List<String> headers = new ArrayList<>();
     List<String> scopeNotes = new ArrayList<>();
+    List<String> progress = new ArrayList<>();
+    changeSetData.setReviewProgressListener(progress::add);
     doAnswer(
             invocation -> {
               headers.add(changeSetData.getReviewGroupHeader());
@@ -180,6 +182,8 @@ public class ReviewGroupReviewerTest {
     assertNull(changeSetData.getReviewGroupHeader());
     assertTrue(scopeNotes.getFirst().matches("Only this change: \\d changes, \\d+ lines, limit 5"));
     assertNull(changeSetData.getReviewScopeNote());
+    // reported before the review runs, for the waiting Review Agent panel
+    assertEquals(List.of(scopeNotes.getFirst()), progress);
   }
 
   @Test

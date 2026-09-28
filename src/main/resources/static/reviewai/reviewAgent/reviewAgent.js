@@ -56,9 +56,16 @@
             (sendResult.wait_for_assistant_reply === false ||
               sendResult.waitForAssistantReply === false)
           );
+        // A note from the running review (e.g. only this change of the group is reviewed) is shown
+        // at once, as the first part of the answer.
+        let notice = null;
         const assistantReply = shouldWaitForAssistantReply
           ? await this._waitForAssistantReply(change, sentRequestId, baselineKeys, {
               excludeDynamicConfiguration: Boolean(directResponse),
+              onNotice: text => {
+                notice = text;
+                listener.emitResponse(agentUtils.buildChatResponse(`${text}\n\n`, 0));
+              },
             })
           : null;
         // Still running when the panel stops waiting: keep what is needed to fill in the answer
@@ -71,21 +78,24 @@
                 direct_response: directResponse || '',
               }
             : null;
-        const responseText = !shouldWaitForAssistantReply
-          ? directResponse
-          : agentUtils.joinAgentResponses(
-              directResponse,
-              pending ? agentUtils.pendingResponseText : assistantReply
-            );
+        const responseText = agentUtils.withoutNotice(
+          !shouldWaitForAssistantReply
+            ? directResponse
+            : agentUtils.joinAgentResponses(
+                directResponse,
+                pending ? agentUtils.pendingResponseText : assistantReply
+              ),
+          notice
+        );
         await this.conversationTurns.storeConversationTurn(
           change,
           req,
           conversationId,
           prompt,
-          responseText,
+          agentUtils.joinAgentResponses(notice, responseText),
           pending
         );
-        listener.emitResponse(agentUtils.buildChatResponse(responseText));
+        listener.emitResponse(agentUtils.buildChatResponse(responseText, notice ? 1 : 0));
         listener.done();
       } catch (error) {
         listener.emitResponse(
@@ -121,6 +131,7 @@
       const deadline = Date.now() + agentUtils.agentConfig.responseTimeoutMs;
       const pollIntervalMs =
         agentUtils.agentConfig.responsePollIntervalMs || reviewAi.config.pollIntervalMs;
+      let shownNotice = null;
 
       while (Date.now() < deadline) {
         await agentUtils.sleep(pollIntervalMs);
@@ -141,6 +152,11 @@
         const state = status && status.status;
         const statusResponse =
           status && (status.response_text || status.responseText);
+        const notice = status && status.notice;
+        if (notice && notice !== shownNotice && config.onNotice) {
+          shownNotice = notice;
+          config.onNotice(notice);
+        }
         if (state === 'failed') {
           return statusResponse || 'ReviewAI request failed.';
         }

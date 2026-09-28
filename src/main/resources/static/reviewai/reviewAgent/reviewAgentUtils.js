@@ -15,9 +15,9 @@
     'shown here when you reopen this conversation.';
   const responseEntrySeparator = '\n\n---\n\n';
 
-  function buildChatResponse(text) {
+  function buildChatResponse(text, partId) {
     return {
-      response_parts: [{id: 0, text}],
+      response_parts: [{id: partId || 0, text}],
       references: [],
       citations: [],
       timestamp_millis: Date.now(),
@@ -45,6 +45,19 @@
       entry.line || '',
       entry.message || '',
     ].join('\u0000');
+  }
+
+  // Drops a notice the panel already showed from the final answer (the review message repeats it).
+  function withoutNotice(text, notice) {
+    if (!notice || !text) {
+      return text;
+    }
+    return String(text)
+      .split(notice.trim())
+      .join('')
+      .replace(/^[ \t]*(?:\*\*)?[^\n]*Message:(?:\*\*)?[ \t]*$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   function latestUpdated(entries) {
@@ -361,6 +374,7 @@
     pendingTurnKey,
     pendingResponseText,
     latestUpdated,
+    withoutNotice,
     assistantEntriesSince,
     buildChatResponse,
     sleep,

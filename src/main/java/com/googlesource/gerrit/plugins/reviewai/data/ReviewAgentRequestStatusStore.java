@@ -45,6 +45,24 @@ public class ReviewAgentRequestStatusStore {
     put(requestId, new RequestStatus(requestId, STATUS_PENDING, prompt, null));
   }
 
+  /**
+   * Adds a note to a request that is still running, e.g. that a group review covers only this
+   * change. The Review Agent panel shows it while it waits for the answer.
+   */
+  public synchronized void notice(String requestId, String notice) {
+    if (requestId == null || requestId.isBlank() || notice == null || notice.isBlank()) {
+      return;
+    }
+    Map<String, RequestStatus> statuses = getStatuses();
+    RequestStatus status = statuses.get(requestId);
+    if (status == null || !STATUS_PENDING.equals(status.status)) {
+      return;
+    }
+    status.notice = notice;
+    status.updatedMillis = System.currentTimeMillis();
+    pluginDataHandler.setJsonValue(KEY_REQUEST_STATUSES, statuses);
+  }
+
   public synchronized void completed(String requestId, String responseText) {
     update(requestId, STATUS_COMPLETED, responseText);
   }
@@ -164,10 +182,14 @@ public class ReviewAgentRequestStatusStore {
       return;
     }
     RequestStatus existing = getStatuses().get(requestId);
-    put(
-        requestId,
+    RequestStatus updated =
         new RequestStatus(
-            requestId, status, existing == null ? null : existing.prompt, responseText));
+            requestId, status, existing == null ? null : existing.prompt, responseText);
+    if (existing != null) {
+      updated.previousRequestId = existing.previousRequestId;
+      updated.notice = existing.notice;
+    }
+    put(requestId, updated);
   }
 
   private void put(String requestId, RequestStatus requestStatus) {
@@ -188,6 +210,8 @@ public class ReviewAgentRequestStatusStore {
     public String prompt;
     public String responseText;
     public String previousRequestId;
+    // Shown by the panel while the request runs (fork)
+    public String notice;
     public long updatedMillis;
 
     public RequestStatus(String requestId, String status, String prompt, String responseText) {

@@ -39,6 +39,8 @@ import lombok.extern.slf4j.Slf4j;
 public class AiHistory extends AiComment {
   private final Set<String> messagesExcludedFromHistory;
   private final AiHistoryMessageFilter messageFilter;
+  // "Reviewed ... found no new issues" messages carry no content for the model
+  private final String noIssuesPrefix;
   @Getter private final HashMap<String, GerritComment> commentMap;
   private final GerritCommentThreadIndex commentThreadIndex;
   private final HashMap<String, GerritComment> patchSetCommentMap;
@@ -60,6 +62,11 @@ public class AiHistory extends AiComment {
     CommentData commentData = gerritClientData.getCommentData();
     messagesExcludedFromHistory =
         Set.of(Settings.GERRIT_DEFAULT_MESSAGE_DONE, localizer.getText("message.empty.review"));
+    String noIssues = localizer.getText("message.review.no.issues");
+    noIssuesPrefix =
+        noIssues == null || noIssues.indexOf('%') <= 0
+            ? null
+            : noIssues.substring(0, noIssues.indexOf('%'));
     messageFilter = new AiHistoryMessageFilter();
     commentMap = commentData.getCommentMap();
     commentThreadIndex = new GerritCommentThreadIndex(commentMap.values());
@@ -230,6 +237,7 @@ public class AiHistory extends AiComment {
     boolean shouldNotProcessComment =
         messageContent.isEmpty()
             || messagesExcludedFromHistory.contains(messageContent)
+            || (noIssuesPrefix != null && messageContent.startsWith(noIssuesPrefix))
             || !messageFilter.shouldIncludeMessage(messageContent)
             || patchSetCommentAdded.contains(messageContent)
             || isBeforeOrAtForgetThreadCutoff(comment)

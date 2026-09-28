@@ -166,6 +166,25 @@ public class PluginDataTest extends TestBase {
   }
 
   @Test
+  public void testReviewAgentNoticeIsKeptOnlyWhileTheRequestRuns() {
+    PluginDataHandlerProvider provider =
+        new PluginDataHandlerProvider(mockPluginDataPath, getGerritChange(), getTestReviewAiDb());
+    ReviewAgentRequestStatusStore statusStore =
+        new ReviewAgentRequestStatusStore(provider.getChangeScope());
+    statusStore.pending("request-1", "/review --topic");
+
+    statusStore.notice("request-1", "Only this change was reviewed.");
+
+    assertEquals("Only this change was reviewed.", statusStore.get("request-1").notice);
+    assertEquals(ReviewAgentRequestStatusStore.STATUS_PENDING, statusStore.get("request-1").status);
+
+    statusStore.completed("request-1", "done");
+    statusStore.notice("request-1", "late note");
+    assertEquals("Only this change was reviewed.", statusStore.get("request-1").notice);
+    assertEquals(ReviewAgentRequestStatusStore.STATUS_COMPLETED, statusStore.get("request-1").status);
+  }
+
+  @Test
   public void testReviewAgentEventResolvesItsExactConcurrentRequest() {
     PluginDataHandlerProvider provider =
         new PluginDataHandlerProvider(mockPluginDataPath, getGerritChange(), getTestReviewAiDb());

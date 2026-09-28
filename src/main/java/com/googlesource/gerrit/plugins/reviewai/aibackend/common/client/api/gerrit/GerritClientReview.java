@@ -33,6 +33,7 @@ import com.google.gerrit.server.util.ManualRequestContext;
 import com.google.inject.Inject;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.api.ai.AiResponseContent;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
+import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.ReviewBatch;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.ReviewConcern;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
@@ -218,7 +219,7 @@ public class GerritClientReview extends GerritClientAccount {
     log.debug("Building review input.");
     ReviewInput reviewInput = ReviewInput.create();
     Map<String, List<CommentInput>> comments = new HashMap<>();
-    String systemMessage = localizer.getText("message.empty.review");
+    String systemMessage = getNothingToReportMessage(changeSetData);
     if (changeSetData.getReviewSystemMessage() != null) {
       systemMessage = changeSetData.getReviewSystemMessage();
       reviewInput.notify = NotifyHandling.NONE;
@@ -236,6 +237,32 @@ public class GerritClientReview extends GerritClientAccount {
       reviewInput.comments = comments;
     }
     return reviewInput;
+  }
+
+  /**
+   * The message of a review without comments. For a review it says what was reviewed, so that the
+   * change shows it was checked and nobody requests the same review again.
+   */
+  private String getNothingToReportMessage(ChangeSetData changeSetData) {
+    boolean review =
+        !Boolean.TRUE.equals(change.getIsCommentEvent())
+            || Boolean.TRUE.equals(changeSetData.getForcedReview());
+    String template = localizer.getText("message.review.no.issues");
+    if (!review || template == null) {
+      return localizer.getText("message.empty.review");
+    }
+    ReviewScope scope = changeSetData.getReviewScope();
+    String reviewed =
+        scope == ReviewScope.COMMIT_MESSAGE
+            ? localizer.getText("message.review.no.issues.commit.message")
+            : scope == ReviewScope.PATCHSET || !config.getAiReviewCommitMessages()
+                ? localizer.getText("message.review.no.issues.code")
+                : localizer.getText("message.review.no.issues.full");
+    String patchSet =
+        change.getPatchSetNumber() != null
+            ? String.valueOf(change.getPatchSetNumber())
+            : change.getPatchSetAttribute().map(attribute -> String.valueOf(attribute.number)).orElse("?");
+    return String.format(template, reviewed, patchSet);
   }
 
   private void updateSystemMessage(
