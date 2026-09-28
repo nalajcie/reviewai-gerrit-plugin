@@ -25,6 +25,8 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class FilenameSanitizer {
+  private static final String COMMIT_MESSAGE_FILENAME = "/COMMIT_MSG";
+
   private final List<String> patchSetFiles;
 
   public FilenameSanitizer(GerritClient gerritClient, GerritChange change) {
@@ -38,6 +40,13 @@ public class FilenameSanitizer {
     String filename = replyItem.getFilename();
     log.debug("Sanitizing filename: {}", filename);
     if (filename == null || filename.isEmpty() || patchSetFiles.contains(filename)) {
+      return;
+    }
+    // Models often drop the leading slash of Gerrit's commit-message path, which is not among the
+    // patch set files, so the substring match below can't find it.
+    if (COMMIT_MESSAGE_FILENAME.substring(1).equals(filename)) {
+      log.debug("Filename sanitized: {}", COMMIT_MESSAGE_FILENAME);
+      replyItem.setFilename(COMMIT_MESSAGE_FILENAME);
       return;
     }
     String sanitizedFilename =
