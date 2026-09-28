@@ -55,6 +55,8 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class GerritClientReview extends GerritClientAccount {
+  private static final String COMMIT_MESSAGE_FILENAME = "/COMMIT_MSG";
+
   private final Localizer localizer;
   private final PublishedCommentConcernBinder concernBinder;
 
@@ -230,7 +232,12 @@ public class GerritClientReview extends GerritClientAccount {
       }
     }
     if (!shouldSuppressSystemMessage(changeSetData, reviewScore)) {
-      updateSystemMessage(changeSetData, reviewInput, comments.isEmpty(), systemMessage);
+      updateSystemMessage(
+          changeSetData,
+          reviewInput,
+          comments.isEmpty(),
+          systemMessage,
+          getCleanCodeMessage(changeSetData, comments));
     }
 
     if (!comments.isEmpty()) {
@@ -258,18 +265,43 @@ public class GerritClientReview extends GerritClientAccount {
             : scope == ReviewScope.PATCHSET || !config.getAiReviewCommitMessages()
                 ? localizer.getText("message.review.no.issues.code")
                 : localizer.getText("message.review.no.issues.full");
-    String patchSet =
-        change.getPatchSetNumber() != null
-            ? String.valueOf(change.getPatchSetNumber())
-            : change.getPatchSetAttribute().map(attribute -> String.valueOf(attribute.number)).orElse("?");
-    return String.format(template, reviewed, patchSet);
+    return String.format(template, reviewed, getPatchSetLabel());
+  }
+
+  /**
+   * A review whose only comments are on the commit message also says that the code was reviewed
+   * and had nothing new, otherwise it looks like the code was not reviewed at all.
+   */
+  private String getCleanCodeMessage(
+      ChangeSetData changeSetData, Map<String, List<CommentInput>> comments) {
+    boolean review =
+        !Boolean.TRUE.equals(change.getIsCommentEvent())
+            || Boolean.TRUE.equals(changeSetData.getForcedReview());
+    String template = localizer.getText("message.review.no.issues");
+    if (!review
+        || template == null
+        || comments.isEmpty()
+        || changeSetData.getReviewSystemMessage() != null
+        || changeSetData.getReviewScope() == ReviewScope.COMMIT_MESSAGE
+        || !comments.keySet().stream().allMatch(COMMIT_MESSAGE_FILENAME::equals)) {
+      return null;
+    }
+    return String.format(
+        template, localizer.getText("message.review.no.issues.code"), getPatchSetLabel());
+  }
+
+  private String getPatchSetLabel() {
+    return change.getPatchSetNumber() != null
+        ? String.valueOf(change.getPatchSetNumber())
+        : change.getPatchSetAttribute().map(attribute -> String.valueOf(attribute.number)).orElse("?");
   }
 
   private void updateSystemMessage(
       ChangeSetData changeSetData,
       ReviewInput reviewInput,
       boolean emptyComments,
-      String systemMessage) {
+      String systemMessage,
+      String cleanCodeMessage) {
     List<String> messages = new ArrayList<>();
     if (changeSetData.getReviewScopeNote() != null) {
       messages.add(
@@ -288,6 +320,9 @@ public class GerritClientReview extends GerritClientAccount {
     }
     if (emptyComments && changeSetData.getReviewRepeatedCommentsMessage() == null) {
       messages.add(SystemMessageFormatter.getPrefixedSystemMessage(localizer, systemMessage));
+    }
+    if (cleanCodeMessage != null) {
+      messages.add(SystemMessageFormatter.getPrefixedSystemMessage(localizer, cleanCodeMessage));
     }
     SystemMessageFormatter.appendConfigurationWarningMessages(config, localizer, messages);
     if (config.getAiReviewUsageInMessage() && changeSetData.getAiUsageSummary() != null) {

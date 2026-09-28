@@ -16,6 +16,10 @@
 
 package com.googlesource.gerrit.plugins.reviewai.listener;
 
+import static org.mockito.Mockito.doAnswer;
+
+import static org.junit.Assert.assertNull;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -37,6 +41,7 @@ import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration.TopicReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.review.PatchSetReviewer;
 import com.googlesource.gerrit.plugins.reviewai.review.topic.ReviewGroupMember;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
@@ -122,6 +127,32 @@ public class ReviewGroupPatchSetReviewTest {
 
     verify(reviewer).review(superproject, true);
     verify(reviewer, never()).reviewGroup(any(), anyBoolean());
+  }
+
+  @Test
+  public void topicReviewOfAChangeWithoutRelatedChangesSaysSo() throws Exception {
+    when(resolver.resolve(config, gerritClient, superproject))
+        .thenReturn(List.of(new ReviewGroupMember(superproject, config, true)));
+    when(config.getLocaleDefault()).thenReturn(java.util.Locale.ENGLISH);
+    ChangeSetData changeSetData = new ChangeSetData(1);
+    changeSetData.setForcedReview(true);
+    changeSetData.setForcedTopicReview(true);
+    List<String> progress = new ArrayList<>();
+    changeSetData.setReviewProgressListener(progress::add);
+    List<String> notesDuringReview = new ArrayList<>();
+    doAnswer(
+            invocation -> {
+              notesDuringReview.add(changeSetData.getReviewScopeNote());
+              return null;
+            })
+        .when(reviewer)
+        .review(superproject, true);
+
+    handler(superproject, changeSetData).processEvent();
+
+    assertTrue(notesDuringReview.getFirst().startsWith("No related open changes"));
+    assertEquals(notesDuringReview, progress);
+    assertNull(changeSetData.getReviewScopeNote());
   }
 
   @Test

@@ -177,6 +177,35 @@ public class GerritClientReviewTest {
   }
 
   @Test
+  public void reviewWithOnlyCommitMessageCommentsSaysTheCodeHadNoIssues() throws Exception {
+    stubNoIssuesTexts();
+    change.setPatchSetNumber(7);
+    ReviewBatch commitMessageComment = new ReviewBatch("Subject is vague");
+    commitMessageComment.setFilename("/COMMIT_MSG");
+    commitMessageComment.setLine(7);
+
+    client.setReview(change, List.of(commitMessageComment), changeSetData);
+
+    assertTrue(capturedMessage().contains("Reviewed the code of patch set 7: no new issues."));
+  }
+
+  @Test
+  public void reviewWithCodeCommentsDoesNotClaimTheCodeIsClean() throws Exception {
+    stubNoIssuesTexts();
+    ReviewBatch codeComment = new ReviewBatch("Off by one");
+    codeComment.setFilename("src/Example.java");
+    codeComment.setLine(42);
+    ReviewBatch commitMessageComment = new ReviewBatch("Subject is vague");
+    commitMessageComment.setFilename("/COMMIT_MSG");
+    commitMessageComment.setLine(7);
+
+    client.setReview(change, List.of(codeComment, commitMessageComment), changeSetData);
+
+    String message = capturedMessage();
+    assertTrue(message == null || !message.contains("no new issues"));
+  }
+
+  @Test
   public void chatReplyWithoutContentKeepsTheGenericMessage() throws Exception {
     when(localizer.getText("message.empty.review")).thenReturn("No update to show");
     change.setIsCommentEvent(true);

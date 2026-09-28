@@ -22,6 +22,7 @@ import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerr
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.gerrit.GerritClient;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.data.ChangeSetData;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration;
+import com.googlesource.gerrit.plugins.reviewai.localization.Localizer;
 import com.googlesource.gerrit.plugins.reviewai.config.Configuration.TopicReviewScope;
 import com.googlesource.gerrit.plugins.reviewai.interfaces.listener.IEventHandlerType;
 import com.googlesource.gerrit.plugins.reviewai.review.PatchSetReviewer;
@@ -251,7 +252,21 @@ public class EventHandlerTypePatchSetReview implements IEventHandlerType {
     GerritChange triggeringChange = group.getFirst().change();
     if (group.size() == 1) {
       if (triggeringChange == change || prepareTopicChangeForReview(triggeringChange)) {
-        reviewer.review(triggeringChange, administratorUser);
+        // "Review With Related Changes" on a change without any: say that only it was reviewed
+        boolean topicRequested =
+            Boolean.TRUE.equals(changeSetData.getForcedTopicReview()) && triggeringChange == change;
+        if (topicRequested) {
+          changeSetData.setReviewScopeNote(
+              new Localizer(config).getText("message.review.group.single"));
+          changeSetData.reportProgress(changeSetData.getReviewScopeNote());
+        }
+        try {
+          reviewer.review(triggeringChange, administratorUser);
+        } finally {
+          if (topicRequested) {
+            changeSetData.setReviewScopeNote(null);
+          }
+        }
       }
       return;
     }
