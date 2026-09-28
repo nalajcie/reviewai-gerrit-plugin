@@ -40,6 +40,7 @@ import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -55,6 +56,8 @@ class LangChainExecutor {
   static final int DIGEST_MAX_RESULT_CHARS = 20_000;
   static final int DIGEST_MAX_TOTAL_CHARS = 150_000;
   static final int LOGGED_ANSWER_MAX_CHARS = 300;
+  private static final Pattern EMPTY_JSON_OBJECT =
+      Pattern.compile("\\s*(?:```(?:json)?\\s*)?\\{\\s*}\\s*(?:```)?\\s*");
   static final String DIGEST_INSTRUCTION =
       "[ReviewAI: the tool budget is used up and tools are no longer available. Below are the"
           + " results of the lookups you made. Do not ask for more context. Return your final"
@@ -255,14 +258,18 @@ class LangChainExecutor {
     }
   }
 
-  /** A reply after tool rounds that is no answer: more tool calls, or no text at all. */
+  /**
+   * A reply after tool rounds that is no answer: more tool calls, no text, or an empty JSON object
+   * (Gemini 3 Flash answered "{}" after 8 tool rounds, without the required fields).
+   */
   private static boolean needsFinalAnswer(AiMessage aiMessage, int toolRounds) {
     if (aiMessage == null || toolRounds == 0) {
       return false;
     }
     return aiMessage.hasToolExecutionRequests()
         || aiMessage.text() == null
-        || aiMessage.text().isBlank();
+        || aiMessage.text().isBlank()
+        || EMPTY_JSON_OBJECT.matcher(aiMessage.text()).matches();
   }
 
   private static String transcriptEntry(ToolExecutionRequest request, String output) {

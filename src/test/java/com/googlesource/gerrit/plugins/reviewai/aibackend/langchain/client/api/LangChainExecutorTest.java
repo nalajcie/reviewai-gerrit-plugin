@@ -317,6 +317,29 @@ public class LangChainExecutorTest {
   }
 
   @Test
+  public void asksAgainWhenTheReplyAfterToolRoundsIsAnEmptyJsonObject() {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiMaxToolResponseRounds()).thenReturn(10);
+    GerritChange change = Mockito.mock(GerritChange.class);
+    when(change.getFullChangeId()).thenReturn("project~branch~change");
+    GitRepoFiles gitRepoFiles = Mockito.mock(GitRepoFiles.class);
+    when(gitRepoFiles.getPatchSetFileTree(config, change, null)).thenReturn(List.of());
+    RecordingChatModel model =
+        new RecordingChatModel(
+            AiMessage.from(List.of(toolRequest("call_1"))),
+            AiMessage.from("```json\n{}\n```"),
+            AiMessage.from("{\"replies\":[]}"));
+
+    AiMessage result =
+        new LangChainExecutor(
+                config, null, List.of(treeToolSpecification()), true, gitRepoFiles, null)
+            .execute(model, change, memory());
+
+    assertEquals("{\"replies\":[]}", result.text());
+    assertEquals(3, model.requests.size());
+  }
+
+  @Test
   public void keepsAnEmptyReplyWithoutToolRounds() {
     Configuration config = Mockito.mock(Configuration.class);
     when(config.getAiMaxToolResponseRounds()).thenReturn(5);

@@ -19,6 +19,7 @@ package com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.api.ai;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.api.ai.AiReplyItem;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.api.ai.AiResponseContent;
 import com.googlesource.gerrit.plugins.reviewai.aibackend.common.model.review.PendingReviewConcernUpdates;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,6 +35,10 @@ public final class AiResponseContentMerger {
     for (AiResponseContent aiResponseContent : aiResponseContents) {
       List<AiReplyItem> replies = aiResponseContent.getReplies();
       if (replies != null) {
+        // A stage can answer without a replies field (Gemini returned "{}")
+        if (mergedResponse.getReplies() == null) {
+          mergedResponse.setReplies(new ArrayList<>());
+        }
         mergedResponse.getReplies().addAll(replies);
       } else {
         mergedResponse.setMessageContent(aiResponseContent.getMessageContent());

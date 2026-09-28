@@ -44,6 +44,21 @@ public class AiResponseContentMergerTest {
     assertFalse(getGson().toJson(merged).contains("pendingConcernUpdates"));
   }
 
+  @Test
+  public void mergesRepliesIntoAStageAnswerWithoutReplies() {
+    // Gemini answered the code stage with "{}"
+    AiResponseContent codeResponse = new AiResponseContent("{}");
+    AiResponseContent commitResponse = new AiResponseContent("");
+    commitResponse.setReplies(
+        new ArrayList<>(List.of(AiReplyItem.builder().reply("Subject is vague").build())));
+
+    AiResponseContent merged =
+        AiResponseContentMerger.merge(new ArrayList<>(List.of(codeResponse, commitResponse)));
+
+    assertEquals(1, merged.getReplies().size());
+    assertEquals("Subject is vague", merged.getReplies().getFirst().getReply());
+  }
+
   private AiResponseContent response(String reviewerName) {
     ReviewerConcerns reviewerConcerns = new ReviewerConcerns();
     reviewerConcerns.setReviewer(
