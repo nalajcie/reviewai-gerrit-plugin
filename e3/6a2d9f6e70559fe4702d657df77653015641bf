@@ -1,0 +1,25 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/api/ai/AiResponseContentMerger.java
+  s_87eb29ce0b3b15::t_3746c5f4924527 22,38-41
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutor.java
+  s_87eb29ce0b3b15::t_c446450568f4f1 43,59-60,261-264,271-272
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/api/ai/AiResponseContentMergerTest.java
+  s_87eb29ce0b3b15::t_f00fdd5a477886 47-61
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/langchain/client/api/LangChainExecutorTest.java
+  s_87eb29ce0b3b15::t_936f429d336968 319-341
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e36a2d9f6e70559fe4702d657df77653015641bf",
+  "prompts": {},
+  "sessions": {
+    "s_87eb29ce0b3b15": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "41678f2b-8dbb-4f15-a243-b1766078dc48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
