@@ -294,7 +294,8 @@ public class LangChainMultiAgentReviewClient extends LangChainClient implements 
           CommitMessageReplies.pin(
               reviewRequestResult.getResponseContent(),
               change,
-              changeSetData.getReviewGroupChangesByPrefix());
+              changeSetData.getReviewGroupChangesByPrefix(),
+              patchSet);
         }
         aiResponseContents.add(reviewRequestResult.getResponseContent());
       }

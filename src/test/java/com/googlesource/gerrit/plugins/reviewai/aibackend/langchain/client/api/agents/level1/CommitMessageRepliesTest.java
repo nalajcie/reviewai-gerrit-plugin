@@ -60,6 +60,68 @@ public class CommitMessageRepliesTest {
         pin(members, OTHER + "COMMIT_MSG", OTHER + "src/span.h", "/COMMIT_MSG", null));
   }
 
+  private static final String MERGED_PATCH =
+      String.join(
+          "\n",
+          "Review these Gerrit patch sets ...",
+          "ReviewAI origin: " + OWN,
+          "Gerrit change: pilot~master~I1",
+          "Subject: [PATCH] pilot: update the board config",
+          "",
+          "diff --git a/" + OWN + "board.yaml b/" + OWN + "board.yaml",
+          "+flash: all parts",
+          "",
+          "ReviewAI origin: " + OTHER,
+          "Gerrit change: core-libs~master~I2",
+          "Subject: [PATCH] docs: plugin administration, debugging and config checks",
+          "",
+          "diff --git a/" + OTHER + "span.h b/" + OTHER + "span.h");
+
+  @Test
+  public void unprefixedReplyGoesToTheMemberWhoseSubjectItQuotes() {
+    assertEquals(
+        List.of(OTHER + "COMMIT_MSG", OWN + "COMMIT_MSG"),
+        pinMerged(
+            reply("/COMMIT_MSG", "The subject uses 'and' ('debugging and config checks').", null),
+            reply("/COMMIT_MSG", "Say why 'update the board config' is needed.", null)));
+  }
+
+  @Test
+  public void codeSnippetDecidesBeforeQuotes() {
+    assertEquals(
+        List.of(OTHER + "COMMIT_MSG"),
+        pinMerged(
+            reply(
+                "COMMIT_MSG",
+                "Unlike 'update the board config', this subject is a list.",
+                "docs: plugin administration, debugging and config checks")));
+  }
+
+  @Test
+  public void diffContentIsNotMistakenForACommitMessage() {
+    // "flash: all parts" is only in the diff of OWN, not in a commit message: no match, fallback.
+    assertEquals(
+        List.of(OWN + "COMMIT_MSG"),
+        pinMerged(reply(null, "Mention the 'flash: all parts' change.", null)));
+  }
+
+  private List<String> pinMerged(AiReplyItem... replies) {
+    Map<String, GerritChange> members = new LinkedHashMap<>();
+    members.put(OWN, change);
+    members.put(OTHER, other);
+    AiResponseContent response = new AiResponseContent("");
+    response.setReplies(new ArrayList<>(List.of(replies)));
+    CommitMessageReplies.pin(response, change, members, MERGED_PATCH);
+    return response.getReplies().stream().map(AiReplyItem::getFilename).toList();
+  }
+
+  private static AiReplyItem reply(String filename, String text, String codeSnippet) {
+    AiReplyItem reply = AiReplyItem.builder().reply(text).build();
+    reply.setFilename(filename);
+    reply.setCodeSnippet(codeSnippet);
+    return reply;
+  }
+
   private List<String> pin(Map<String, GerritChange> members, String... filenames) {
     AiResponseContent response = new AiResponseContent("");
     List<AiReplyItem> replies = new ArrayList<>();

@@ -39,7 +39,10 @@ public class FilenameSanitizer {
   public void sanitizeFilename(AiReplyItem replyItem) {
     String filename = replyItem.getFilename();
     log.debug("Sanitizing filename: {}", filename);
-    if (filename == null || filename.isEmpty() || patchSetFiles.contains(filename)) {
+    if (filename == null
+        || filename.isEmpty()
+        || patchSetFiles.contains(filename)
+        || COMMIT_MESSAGE_FILENAME.equals(filename)) {
       return;
     }
     // Models often drop the leading slash of Gerrit's commit-message path, which is not among the
