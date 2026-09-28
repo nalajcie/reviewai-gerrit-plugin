@@ -57,6 +57,28 @@ public class GeminiLangChainProviderTest {
     assertEquals(ILangChainProvider.LANGCHAIN_MAX_RETRIES, getMaximumRetries(langChainProvider));
   }
 
+  @Test
+  public void keepsThoughtSignaturesForToolRounds() throws Exception {
+    Configuration config = Mockito.mock(Configuration.class);
+    when(config.getAiDomain()).thenReturn(Configuration.GEMINI_DOMAIN);
+    when(config.getAiToken()).thenReturn("dummy-token");
+    when(config.getAiModel()).thenReturn("gemini-3.8-flash");
+    when(config.getAiConnectionTimeout()).thenReturn(180);
+
+    LangChainProvider langChainProvider = provider.buildChatModel(config, 0.0);
+
+    assertEquals(Boolean.TRUE, getModelField(langChainProvider, "returnThinking"));
+    assertEquals(Boolean.TRUE, getModelField(langChainProvider, "sendThinking"));
+  }
+
+  private static Object getModelField(LangChainProvider langChainProvider, String name)
+      throws Exception {
+    // Declared on the package-private BaseGeminiChatModel.
+    Field field = langChainProvider.getModel().getClass().getSuperclass().getDeclaredField(name);
+    field.setAccessible(true);
+    return field.get(langChainProvider.getModel());
+  }
+
   private static int getMaximumRetries(LangChainProvider langChainProvider) throws Exception {
     Field field = langChainProvider.getModel().getClass().getDeclaredField("maximumRetries");
     field.setAccessible(true);

@@ -52,6 +52,11 @@ public class GeminiLangChainProvider implements ILangChainProvider {
             .temperature(temperature)
             .timeout(Duration.ofSeconds(config.getAiConnectionTimeout()))
             .maxRetries(LANGCHAIN_MAX_RETRIES)
+            // Gemini 3 rejects a tool round whose function call comes back without the
+            // thought_signature it was sent with. LangChain4j keeps the signature only with
+            // returnThinking and sends it back only with sendThinking.
+            .returnThinking(true)
+            .sendThinking(true)
             .build();
 
     return new LangChainProvider(model, endpoint);
