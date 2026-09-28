@@ -1,0 +1,21 @@
+src/main/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/agents/level0/singleagent/AiPromptReview.java
+  s_99ebfbf269eb4b::t_f9542632ae0e94 245-251,253-261,266
+src/test/java/com/googlesource/gerrit/plugins/reviewai/aibackend/common/client/prompt/AiPromptFactoryTest.java
+  s_99ebfbf269eb4b::t_0ce6650d5caa48 27-28,494-535
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ca22e09a3438d34c072c14fae3f22f07b7d08559",
+  "prompts": {},
+  "sessions": {
+    "s_99ebfbf269eb4b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3bc8480-1401-4289-98e9-b54aae12878c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
