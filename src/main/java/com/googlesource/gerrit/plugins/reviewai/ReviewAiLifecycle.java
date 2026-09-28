@@ -36,6 +36,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.LoggerFactory;
 
 /**
  * Manages the ReviewAI plugin lifecycle.
@@ -96,9 +97,26 @@ public class ReviewAiLifecycle implements LifecycleListener {
     this.listenerClassName = listenerClassName;
   }
 
+  // `gerrit logging set-level` only changes loggers that exist. Creating the package loggers up
+  // front lets it target a package (e.g. `set-level debug reviewai.aibackend`) before the classes
+  // of the first review are loaded; their loggers inherit the package level.
+  static final List<String> PACKAGE_LOGGERS =
+      List.of(
+          "com.googlesource.gerrit.plugins.reviewai",
+          "com.googlesource.gerrit.plugins.reviewai.aibackend",
+          "com.googlesource.gerrit.plugins.reviewai.aibackend.langchain",
+          "com.googlesource.gerrit.plugins.reviewai.aibackend.common.client.code.context.ondemand",
+          "com.googlesource.gerrit.plugins.reviewai.listener",
+          "com.googlesource.gerrit.plugins.reviewai.review");
+
+  private static void createPackageLoggers() {
+    PACKAGE_LOGGERS.forEach(LoggerFactory::getLogger);
+  }
+
   @Override
   public void start() {
     log.info("Starting ReviewAI lifecycle");
+    createPackageLoggers();
 
     // Take ownership before the first query. Gerrit starts the new plugin instance before stopping
     // the old one, and ownership is what stops the old instance tearing this database down
