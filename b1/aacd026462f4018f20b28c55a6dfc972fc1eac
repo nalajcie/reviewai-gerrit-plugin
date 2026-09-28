@@ -1,0 +1,19 @@
+src/dev/test/java/com/googlesource/gerrit/plugins/reviewai/ConfigurationDefaultsTest.java
+  s_99ebfbf269eb4b::t_3ae2bfda407a56 692-697
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b1aacd026462f4018f20b28c55a6dfc972fc1eac",
+  "prompts": {},
+  "sessions": {
+    "s_99ebfbf269eb4b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e3bc8480-1401-4289-98e9-b54aae12878c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
