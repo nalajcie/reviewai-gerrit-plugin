@@ -56,20 +56,34 @@
             (sendResult.wait_for_assistant_reply === false ||
               sendResult.waitForAssistantReply === false)
           );
+        const assistantReply = shouldWaitForAssistantReply
+          ? await this._waitForAssistantReply(change, sentRequestId, baselineKeys, {
+              excludeDynamicConfiguration: Boolean(directResponse),
+            })
+          : null;
+        // Still running when the panel stops waiting: keep what is needed to fill in the answer
+        // when the conversation is opened again.
+        const pending =
+          shouldWaitForAssistantReply && assistantReply === null
+            ? {
+                request_id: sentRequestId,
+                since_updated: agentUtils.latestUpdated(baselineEntries),
+                direct_response: directResponse || '',
+              }
+            : null;
         const responseText = !shouldWaitForAssistantReply
           ? directResponse
           : agentUtils.joinAgentResponses(
               directResponse,
-              await this._waitForAssistantReply(change, sentRequestId, baselineKeys, {
-                excludeDynamicConfiguration: Boolean(directResponse),
-              })
+              pending ? agentUtils.pendingResponseText : assistantReply
             );
         await this.conversationTurns.storeConversationTurn(
           change,
           req,
           conversationId,
           prompt,
-          responseText
+          responseText,
+          pending
         );
         listener.emitResponse(agentUtils.buildChatResponse(responseText));
         listener.done();
@@ -145,10 +159,64 @@
         return statusResponse || 'ReviewAI completed the request without a visible update.';
       }
 
-      return (
-        'ReviewAI accepted the request. The answer is still being generated and will appear ' +
-        'in Gerrit comments.'
+      return null;
+    }
+
+    /**
+     * Fills in the answer of a turn stored while its request was still running, once the request
+     * has finished. Returns the updated turn, or the turn unchanged while it is still running.
+     */
+    async _resolvePendingTurn(change, conversationId, turn, turnIndex, entries) {
+      const pending = turn && turn[agentUtils.pendingTurnKey];
+      if (!pending) {
+        return turn;
+      }
+      let status = null;
+      try {
+        status = await this._fetchMessageStatus(change, pending.request_id);
+      } catch {
+        status = null;
+      }
+      const state = status && status.status;
+      const statusResponse = status && (status.response_text || status.responseText);
+      const newEntries = agentUtils.assistantEntriesSince(
+        entries,
+        pending.since_updated,
+        Boolean(pending.direct_response)
       );
+      if (state !== 'completed' && state !== 'failed' && !(!state && newEntries.length)) {
+        return turn;
+      }
+      const historyResponse = agentUtils.formatAgentEntries(newEntries);
+      let answer;
+      if (state === 'failed') {
+        answer = statusResponse || historyResponse || 'ReviewAI request failed.';
+      } else if (historyResponse) {
+        answer = agentUtils.mergePanelResponseWithHistory(historyResponse, statusResponse);
+      } else {
+        answer = statusResponse || 'ReviewAI completed the request without a visible update.';
+      }
+      const resolvedTurn = {
+        ...turn,
+        response: agentUtils.buildChatResponse(
+          agentUtils.normalizeResponseEntrySeparators(
+            agentUtils.joinAgentResponses(pending.direct_response, answer)
+          )
+        ),
+      };
+      delete resolvedTurn[agentUtils.pendingTurnKey];
+      try {
+        await this._appendStoredConversationTurn(change, {
+          conversationId,
+          conversation_id: conversationId,
+          turnIndex,
+          turn_index: turnIndex,
+          turn: resolvedTurn,
+        });
+      } catch {
+        // Shown now; stored again on the next open.
+      }
+      return resolvedTurn;
     }
 
     async _getNewAssistantHistoryResponse(change, baselineKeys, config) {

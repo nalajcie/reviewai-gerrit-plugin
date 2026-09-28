@@ -2,11 +2,17 @@
   const reviewAi = global.ReviewAi;
 
   const agentConfig = {
-    responseTimeoutMs: 120000,
+    // A review with tool rounds and a final-answer rescue can take several minutes.
+    responseTimeoutMs: 600000,
     responsePollIntervalMs: 1000,
     responseSettleMs: 500,
   };
   const defaultActionId = 'review-change';
+  // Turn field for an answer that was not ready when the panel stopped waiting.
+  const pendingTurnKey = 'reviewai_pending';
+  const pendingResponseText =
+    'ReviewAI is still working on this request. The answer will be posted to the change and ' +
+    'shown here when you reopen this conversation.';
   const responseEntrySeparator = '\n\n---\n\n';
 
   function buildChatResponse(text) {
@@ -39,6 +45,24 @@
       entry.line || '',
       entry.message || '',
     ].join('\u0000');
+  }
+
+  function latestUpdated(entries) {
+    return (entries || []).reduce(
+      (latest, entry) => (entry && entry.updated && entry.updated > latest ? entry.updated : latest),
+      ''
+    );
+  }
+
+  // Assistant entries posted after the given server time (history timestamps, same format).
+  function assistantEntriesSince(entries, sinceUpdated, excludeDynamicConfiguration) {
+    return (entries || []).filter(
+      entry =>
+        isAssistantEntry(entry) &&
+        Boolean(entry.updated) &&
+        entry.updated > (sinceUpdated || '') &&
+        !(excludeDynamicConfiguration && isDynamicConfigurationEntry(entry))
+    );
   }
 
   function isAssistantEntry(entry) {
@@ -334,6 +358,10 @@
   reviewAi.agentUtils = {
     agentConfig,
     defaultActionId,
+    pendingTurnKey,
+    pendingResponseText,
+    latestUpdated,
+    assistantEntriesSince,
     buildChatResponse,
     sleep,
     getChangeNumber,

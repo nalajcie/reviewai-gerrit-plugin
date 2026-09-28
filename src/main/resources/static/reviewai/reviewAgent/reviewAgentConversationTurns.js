@@ -7,7 +7,7 @@
       this.provider = provider;
     }
 
-    async storeConversationTurn(change, req, conversationId, prompt, responseText) {
+    async storeConversationTurn(change, req, conversationId, prompt, responseText, pending) {
       const now = Date.now();
       const normalizedResponseText = agentUtils.normalizeResponseEntrySeparators(responseText);
       const turn = {
@@ -20,6 +20,9 @@
         regeneration_index: (req && req.regeneration_index) || 0,
         timestamp_millis: now,
       };
+      if (pending) {
+        turn[agentUtils.pendingTurnKey] = pending;
+      }
       await this.provider._appendStoredConversationTurn(change, {
         conversationId,
         conversation_id: conversationId,
