@@ -282,6 +282,36 @@ Currently, deferred reevaluation is driven by label-bearing `comment-added` even
 after another event, such as deleting a veto vote or changing WIP, topic, or hashtag state, are applied on the next
 Patch Set or label-vote event rather than immediately.
 
+## Multi-Project Review Groups
+
+With `change.submitWholeTopic = true`, Gerrit submits a topic that spans several repositories as one unit, for example
+a superproject change that moves gitlinks together with the submodule changes those gitlinks point to. By default each
+repository is reviewed on its own, so the AI never sees the other half of such a change. Set
+`topicReviewScope = SUBMITTED_TOGETHER` to review the whole group instead:
+
+```ini
+[plugin "reviewai-gerrit-plugin"]
+    topicReviewScope = SUBMITTED_TOGETHER
+    topicPatchSetWaitMs = 10000
+```
+
+- The group is the set of open changes that Gerrit's `submitted_together` returns for the triggering change, in any
+  project. A group of one change is reviewed as a normal change.
+- Automatic and deferred reviews wait `topicPatchSetWaitMs` for the other events of the group, then review it once per
+  set of change and Patch Set numbers. A group contained in a larger group of the same batch is dropped. A manual
+  review of a topic skips the wait and the deduplication.
+- With `aiReviewApplicableIf`, the group is reviewed only when every reviewable member matches the expression of its
+  own project. A vote on any member re-evaluates the group.
+- Members whose project has no AI review permission, denies it on the branch, or sets `aiReviewPatchSet = false` are
+  sent as read-only context and receive no comments or votes.
+- Paths in the merged patch are prefixed with `reviewai-topic-change-<N>/<project>/`, and the patch starts with a list
+  of the members (prefix, change number, project, branch and subject). Replies are published on the member they refer
+  to. The ON_DEMAND tools resolve prefixed paths to that member's repository at its current Patch Set.
+- Gitlink updates are kept and rendered as `submodule <path>: <old> -> <new>`, followed by
+  `(= change <N> in <project>)` when the new commit is the current revision of another member.
+- When the merged patch exceeds `maxReviewLines`, only the triggering change is reviewed, with the member list
+  prepended, and the fallback is logged.
+
 ## Optional Parameters
 
 - `aiProviders`: Selects provider routes to expose. The default value is `OpenAI`.
@@ -417,6 +447,9 @@ codeContextProject = platform/headers:release-2.0
 - `topicPatchSetWaitMs`: Time, in milliseconds, to wait when handling a Patch Set event for a change with a topic. This
   gives the plugin time to group related Patch Sets from the same topic and run an overall AI review. The default value
   is `3000` milliseconds.
+- `topicReviewScope`: How changes of a topic are grouped for one review. `PROJECT_BRANCH`, the default, groups
+  changes of the same project, branch and topic. `SUBMITTED_TOGETHER` reviews the set of changes that Gerrit submits
+  together with the triggering change, across projects. See [Multi-Project Review Groups](#multi-project-review-groups).
 
 ### Optional Parameters Specific to Review Processing
 
